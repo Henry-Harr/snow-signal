@@ -17,71 +17,62 @@
   a{display:block;padding:12px 14px;color:var(--text);text-decoration:none}
   a:hover{background:#1a2a3d}
   .muted{color:var(--muted);font-size:13px;margin-top:10px}
+  .err{color:#ffb4b4}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>❄️ Snow Signal</h1>
   <div class="panel">
-    <div class="row">
-      <input id="search" placeholder="Search ski resort…" />
-    </div>
+    <div class="row"><input id="search" placeholder="Search ski resort…" /></div>
     <ul id="list"></ul>
     <div id="msg" class="muted">Loading resorts…</div>
+    <div id="err" class="err"></div>
   </div>
 </div>
 
+<!-- Papa Parse (tiny, safe CSV parser) -->
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" defer></script>
 <script>
-/* ====== CONFIG (edit these) ====== */
-const PUBLISH_HTML = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv";
-const GID = "0"; // set to your tab's gid
-const COL_RESORT = "skiresort"; // exact header text (case-insensitive)
-/* ================================= */
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv"; 
+// Example format: 
+// https://docs.google.com/spreadsheets/d/e/XXXXXXXX/pub?gid=0&single=true&output=csv
+const COL_RESORT = "skiresort"; // exact sheet header (case-insensitive)
 
-const $ = (id)=>document.getElementById(id);
-const elList = $("list"), elMsg = $("msg"), elSearch = $("search");
+const $ = id => document.getElementById(id);
+const elList = $("list"), elMsg = $("msg"), elErr = $("err"), elSearch = $("search");
 const lower = s => (s||"").toString().trim().toLowerCase();
 
-function csvUrl(pubhtml,gid){
-  const u = new URL(pubhtml);
-  u.pathname = u.pathname.replace(/\/pubhtml$/, "/pub");
-  u.search = "";
-  u.searchParams.set("gid", gid);
-  u.searchParams.set("single","true");
-  u.searchParams.set("output","csv");
-  return u.toString();
-}
-
-// CSV parser that handles quotes/commas
-function parseCSV(text){
-  const rows=[], re=/\s*(?:"([^"]*(?:""[^"]*)*)"|([^,",\r\n]*))\s*(,|\r?\n|$)/g;
-  let m, row=[];
-  while((m=re.exec(text))!==null){
-    const val = m[1] ? m[1].replace(/""/g,'"') : (m[2]||"");
-    row.push(val);
-    if (m[3] !== ","){ rows.push(row); row=[]; }
-  }
-  return rows.filter(r=>r.length && !(r.length===1 && r[0]===""));
-}
-const idxMap = hdrs => {const m={}; hdrs.forEach((h,i)=>m[lower(h)]=i); return m;};
-
 function renderList(names){
-  elList.innerHTML = names.map(n => {
-    const q = encodeURIComponent(n);
-    return `<li><a href="resort.html?resort=${q}">${n}</a></li>`;
-  }).join("");
+  elList.innerHTML = names.map(n => `<li><a href="resort.html?resort=${encodeURIComponent(n)}">${n}</a></li>`).join("");
   elMsg.textContent = names.length ? "" : "No resorts found.";
 }
 
-(async function main(){
+function onError(txt){
+  elErr.textContent = txt;
+  elMsg.textContent = "";
+}
+
+async function loadCSV(){
   try{
-    const text = await fetch(csvUrl(PUBLISH_HTML, GID)).then(r=>r.text());
-    const rows = parseCSV(text);
-    if(!rows.length){ elMsg.textContent="No data."; return; }
-    const idx = idxMap(rows[0]);
-    const iResort = idx[lower(COL_RESORT)];
-    if (iResort == null){ elMsg.textContent=`Missing header: ${COL_RESORT}`; return; }
-    const names = Array.from(new Set(rows.slice(1).map(r => r[iResort]).filter(Boolean)))
+    // Quick reachability check first
+    const head = await fetch(CSV_URL, { method:"GET", cache:"no-store" });
+    if(!head.ok){ throw new Error("Sheet fetch failed: " + head.status); }
+    const csvText = await head.text();
+
+    const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+    if (parsed.errors && parsed.errors.length){
+      console.warn(parsed.errors);
+    }
+    const rows = parsed.data;
+    if (!rows || !rows.length){ elMsg.textContent = "No data."; return; }
+
+    // find column index case-insensitively
+    const headers = parsed.meta.fields || [];
+    const iResortHdr = headers.find(h => lower(h) === lower(COL_RESORT));
+    if (!iResortHdr){ onError(`Missing header: ${COL_RESORT}`); return; }
+
+    const names = Array.from(new Set(rows.map(r => r[iResortHdr]).filter(Boolean)))
       .sort((a,b)=>a.localeCompare(b));
     renderList(names);
 
@@ -90,12 +81,15 @@ function renderList(names){
       const filtered = names.filter(n => lower(n).includes(q));
       renderList(filtered);
     });
-  }catch(e){
-    console.error(e);
-    elMsg.textContent = "Failed to load sheet. Check publish URL and gid.";
+
+    elMsg.textContent = "";
+  }catch(err){
+    console.error(err);
+    onError("Failed to load sheet. Check the published CSV link (must include output=csv).");
   }
-})();
+}
+
+window.addEventListener("load", loadCSV);
 </script>
 </body>
 </html>
-
