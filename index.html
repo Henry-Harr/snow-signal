@@ -1,58 +1,101 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Snow Signal</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Snow Signal — Search</title>
 <style>
-  body {
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-    background: #0b0f14;
-    color: #e3eef7;
-    text-align: center;
-    padding: 60px 20px;
-  }
-  h1 {
-    font-size: 2.5rem;
-    margin-bottom: 0.5em;
-  }
-  p {
-    color: #b0c4d4;
-    font-size: 1.1rem;
-    max-width: 600px;
-    margin: 0 auto 2em;
-  }
-  a.button {
-    background: #1e88e5;
-    color: white;
-    text-decoration: none;
-    padding: 12px 26px;
-    border-radius: 8px;
-    font-weight: 600;
-    transition: background 0.2s ease;
-  }
-  a.button:hover {
-    background: #1565c0;
-  }
-  footer {
-    margin-top: 4em;
-    font-size: 0.85rem;
-    color: #728ba2;
-  }
+  :root{--bg:#0b0f14;--panel:#111923;--text:#e3eef7;--muted:#9fb1c6;--chip:#182333;--border:#203043;}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:900px;margin:32px auto;padding:0 16px}
+  h1{margin:0 0 12px;font-size:24px}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  input{flex:1;background:var(--chip);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px}
+  ul{list-style:none;margin:0;padding:0}
+  li{border:1px solid var(--border);background:var(--chip);border-radius:12px;margin:8px 0}
+  a{display:block;padding:12px 14px;color:var(--text);text-decoration:none}
+  a:hover{background:#1a2a3d}
+  .muted{color:var(--muted);font-size:13px;margin-top:10px}
 </style>
 </head>
 <body>
+<div class="wrap">
+  <h1>❄️ Snow Signal</h1>
+  <div class="panel">
+    <div class="row">
+      <input id="search" placeholder="Search ski resort…" />
+    </div>
+    <ul id="list"></ul>
+    <div id="msg" class="muted">Loading resorts…</div>
+  </div>
+</div>
 
-<h1>❄️ Snow Signal</h1>
-<p>
-  Real-time ski conditions and resort ratings powered by live snowfall data.
-</p>
+<script>
+/* ====== CONFIG (edit these) ====== */
+const PUBLISH_HTML = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pubhtml";
+const GID = "0"; // set to your tab's gid
+const COL_RESORT = "skiresort"; // exact header text (case-insensitive)
+/* ================================= */
 
-<a class="button" href="ratings.html">View Ski Ratings</a>
+const $ = (id)=>document.getElementById(id);
+const elList = $("list"), elMsg = $("msg"), elSearch = $("search");
+const lower = s => (s||"").toString().trim().toLowerCase();
 
-<footer>
-  © 2025 Snow Signal — built by Henry Harrison
-</footer>
+function csvUrl(pubhtml,gid){
+  const u = new URL(pubhtml);
+  u.pathname = u.pathname.replace(/\/pubhtml$/, "/pub");
+  u.search = "";
+  u.searchParams.set("gid", gid);
+  u.searchParams.set("single","true");
+  u.searchParams.set("output","csv");
+  return u.toString();
+}
 
+// CSV parser that handles quotes/commas
+function parseCSV(text){
+  const rows=[], re=/\s*(?:"([^"]*(?:""[^"]*)*)"|([^,",\r\n]*))\s*(,|\r?\n|$)/g;
+  let m, row=[];
+  while((m=re.exec(text))!==null){
+    const val = m[1] ? m[1].replace(/""/g,'"') : (m[2]||"");
+    row.push(val);
+    if (m[3] !== ","){ rows.push(row); row=[]; }
+  }
+  return rows.filter(r=>r.length && !(r.length===1 && r[0]===""));
+}
+const idxMap = hdrs => {const m={}; hdrs.forEach((h,i)=>m[lower(h)]=i); return m;};
+
+function renderList(names){
+  elList.innerHTML = names.map(n => {
+    const q = encodeURIComponent(n);
+    return `<li><a href="resort.html?resort=${q}">${n}</a></li>`;
+  }).join("");
+  elMsg.textContent = names.length ? "" : "No resorts found.";
+}
+
+(async function main(){
+  try{
+    const text = await fetch(csvUrl(PUBLISH_HTML, GID)).then(r=>r.text());
+    const rows = parseCSV(text);
+    if(!rows.length){ elMsg.textContent="No data."; return; }
+    const idx = idxMap(rows[0]);
+    const iResort = idx[lower(COL_RESORT)];
+    if (iResort == null){ elMsg.textContent=`Missing header: ${COL_RESORT}`; return; }
+    const names = Array.from(new Set(rows.slice(1).map(r => r[iResort]).filter(Boolean)))
+      .sort((a,b)=>a.localeCompare(b));
+    renderList(names);
+
+    elSearch.addEventListener("input", e=>{
+      const q = lower(e.target.value);
+      const filtered = names.filter(n => lower(n).includes(q));
+      renderList(filtered);
+    });
+  }catch(e){
+    console.error(e);
+    elMsg.textContent = "Failed to load sheet. Check publish URL and gid.";
+  }
+})();
+</script>
 </body>
 </html>
+
