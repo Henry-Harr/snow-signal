@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Snow Signal — Resort</title>
 <style>
-  :root{--bg:#0b0f14;--panel:#111923;--text:#e3eef7;--muted:#9fb1c6;--chip:#182333;--border:#203043;--track:#223144;}
+  :root{--bg:#0b0f14;--panel:#111923;--text:#e3eef7;--muted:#9fb1c6;--chip:#182333;--border:#203043;--track:#223144}
   *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   .wrap{max-width:900px;margin:32px auto;padding:0 16px}
   a{color:#8cc0ff;text-decoration:none}
@@ -21,6 +21,7 @@
   .fill{height:100%;width:0%;transition:width .55s ease}
   .tag{position:absolute;right:8px;top:-18px;font-size:11px;color:var(--muted)}
   .back{margin-bottom:12px;display:inline-block}
+  .err{color:#ffb4b4;margin-top:8px}
 </style>
 </head>
 <body>
@@ -35,13 +36,17 @@
     <div id="meta" class="chips"></div>
     <div id="bars"></div>
     <div id="msg" class="muted" style="margin-top:10px">Loading…</div>
+    <div id="err" class="err"></div>
   </div>
 </div>
 
+<!-- Papa Parse for safe CSV parsing -->
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" defer></script>
 <script>
-/* ====== CONFIG (edit these) ====== */
-const PUBLISH_HTML = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv";
-const GID = "0"; // tab gid
+/* ====== CONFIG: set your published CSV URL & headers ====== */
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv"; 
+// Example format:
+// https://docs.google.com/spreadsheets/d/e/XXXX/pub?gid=0&single=true&output=csv
 const COLS = {
   resort:    "skiresort",
   today:     "rating_td",
@@ -49,7 +54,7 @@ const COLS = {
   reasonTd:  "reason_td",    // optional
   reasonTmr: "reason_tmr"    // optional
 };
-/* ================================== */
+/* ========================================================== */
 
 const ratingMap = {
   "poor":      {score:20,  color:"#d32f2f"},
@@ -61,35 +66,17 @@ const ratingMap = {
   "closed":    {score:10,  color:"#9e9e9e"}
 };
 
-const lower = s => (s||"").toString().trim().toLowerCase();
 const $ = id => document.getElementById(id);
-
-function csvUrl(pubhtml,gid){
-  const u=new URL(pubhtml);
-  u.pathname=u.pathname.replace(/\/pubhtml$/,"/pub");
-  u.search="";
-  u.searchParams.set("gid",gid);
-  u.searchParams.set("single","true");
-  u.searchParams.set("output","csv");
-  return u.toString();
-}
-function parseCSV(text){
-  const rows=[], re=/\s*(?:"([^"]*(?:""[^"]*)*)"|([^,",\r\n]*))\s*(,|\r?\n|$)/g;
-  let m,row=[]; while((m=re.exec(text))!==null){
-    const val=m[1]?m[1].replace(/""/g,'"'):(m[2]||"");
-    row.push(val);
-    if(m[3]!==","){ rows.push(row); row=[]; }
-  }
-  return rows.filter(r=>r.length && !(r.length===1 && r[0]===""));
-}
-const idxMap = hdrs => {const m={}; hdrs.forEach((h,i)=>m[lower(h)]=i); return m;};
+const lower = s => (s||"").toString().trim().toLowerCase();
 
 function makeBar(label, rating, reason, metaEl){
   const meta = ratingMap[lower(rating)] || {score:0,color:"#6b7c92"};
   const row=document.createElement("div"); row.className="row";
   const lbl=document.createElement("div"); lbl.className="label"; lbl.textContent=label;
   const track=document.createElement("div"); track.className="track";
-  const fill=document.createElement("div"); fill.className="fill"; fill.style.width=Math.max(4,meta.score)+"%"; fill.style.background=meta.color;
+  const fill=document.createElement("div"); fill.className="fill";
+  fill.style.width = Math.max(4, meta.score) + "%";
+  fill.style.background = meta.color;
   const tag=document.createElement("div"); tag.className="tag"; tag.textContent=(rating||"—").toUpperCase();
   track.append(fill,tag); row.append(lbl,track);
   if (reason){
@@ -99,53 +86,69 @@ function makeBar(label, rating, reason, metaEl){
   return row;
 }
 
-(async function main(){
-  const resort = new URLSearchParams(location.search).get("resort");
-  $("title").textContent = `Snow Signal — ${resort||"Resort"}`;
-  $("subtitle").textContent = resort ? "" : "No resort selected";
-  if(!resort){ $("msg").textContent = "Choose a resort from the search page."; return; }
+function onError(txt){ $("err").textContent = txt; $("msg").textContent=""; }
+
+async function loadResort(){
+  const resortParam = new URLSearchParams(location.search).get("resort");
+  const resortQ = resortParam ? decodeURIComponent(resortParam) : "";
+  $("title").textContent = `Snow Signal — ${resortQ||"Resort"}`;
+  $("subtitle").textContent = resortQ || "No resort selected";
+  if(!resortQ){ $("msg").textContent = "Choose a resort from the search page."; return; }
 
   try{
-    const text = await fetch(csvUrl(PUBLISH_HTML, GID)).then(r=>r.text());
-    const rows = parseCSV(text);
-    if(!rows.length){ $("msg").textContent="No data."; return; }
-    const headers = rows[0], idx = idxMap(headers);
+    // fetch CSV
+    const res = await fetch(CSV_URL, { method:"GET", cache:"no-store" });
+    if(!res.ok) throw new Error("Sheet fetch failed: " + res.status);
+    const csvText = await res.text();
 
-    const cols = {
-      resort: idx[lower(COLS.resort)],
-      today:  idx[lower(COLS.today)],
-      tmr:    idx[lower(COLS.tomorrow)],
-      rTd:    idx[lower(COLS.reasonTd)] ?? null,
-      rTmr:   idx[lower(COLS.reasonTmr)] ?? null
+    // parse CSV
+    const parsed = Papa.parse(csvText, { header:true, skipEmptyLines:true });
+    if (parsed.errors && parsed.errors.length) console.warn(parsed.errors);
+    const rows = parsed.data;
+    if(!rows || !rows.length){ $("msg").textContent = "No data."; return; }
+
+    // map headers (case-insensitive)
+    const fields = parsed.meta.fields || [];
+    const findHdr = want => fields.find(h => lower(h) === lower(want));
+    const H = {
+      resort: findHdr(COLS.resort),
+      today:  findHdr(COLS.today),
+      tmr:    findHdr(COLS.tomorrow),
+      rTd:    findHdr(COLS.reasonTd),
+      rTmr:   findHdr(COLS.reasonTmr)
     };
-    if (cols.resort==null || cols.today==null || cols.tmr==null){
-      $("msg").textContent = `Missing headers. Need: ${COLS.resort}, ${COLS.today}, ${COLS.tomorrow}`;
+    if(!H.resort || !H.today || !H.tmr){
+      onError(`Missing headers. Need at least: ${COLS.resort}, ${COLS.today}, ${COLS.tomorrow}`); 
       return;
     }
 
-    const rec = rows.slice(1).find(r => lower(r[cols.resort]) === lower(decodeURIComponent(resort)));
-    if (!rec){ $("msg").textContent = `No row found for "${resort}".`; return; }
+    // find the matching row
+    const rec = rows.find(r => lower(r[H.resort]) === lower(resortQ));
+    if(!rec){ $("msg").textContent = `No row found for "${resortQ}".`; return; }
 
-    $("title").textContent = `Snow Signal — ${rec[cols.resort]}`;
-    $("subtitle").textContent = rec[cols.resort];
+    // render
+    $("subtitle").textContent = rec[H.resort] || resortQ;
+    const ratingTD  = (rec[H.today] || "").toString().trim();
+    const ratingTMR = (rec[H.tmr]   || "").toString().trim();
+    const reasonTD  = H.rTd  ? (rec[H.rTd]  || "").toString().trim() : "";
+    const reasonTMR = H.rTmr ? (rec[H.rTmr] || "").toString().trim() : "";
 
-    const ratingTD  = (rec[cols.today] || "").trim();
-    const ratingTMR = (rec[cols.tmr]   || "").trim();
-    const reasonTD  = cols.rTd  != null ? (rec[cols.rTd]  || "").trim() : "";
-    const reasonTMR = cols.rTmr != null ? (rec[cols.rTmr] || "").trim() : "";
-
-    const metaEl = $("meta");
-    const barsEl = $("bars");
+    const metaEl = $("meta"), barsEl = $("bars");
     metaEl.innerHTML = ""; barsEl.innerHTML = "";
-    const chip = document.createElement("span"); chip.className="chip"; chip.textContent=rec[cols.resort]; metaEl.appendChild(chip);
+    const chip = document.createElement("span"); chip.className="chip"; chip.textContent = rec[H.resort] || resortQ; 
+    metaEl.appendChild(chip);
+
     barsEl.appendChild(makeBar("Today",    ratingTD,  reasonTD,  metaEl));
     barsEl.appendChild(makeBar("Tomorrow", ratingTMR, reasonTMR, metaEl));
+
     $("msg").textContent = "";
-  }catch(e){
-    console.error(e);
-    $("msg").textContent = "Failed to load sheet. Check publish URL and gid.";
+  }catch(err){
+    console.error(err);
+    onError("Failed to load sheet. Ensure the link is a published CSV (output=csv) and accessible.");
   }
-})();
+}
+
+window.addEventListener("load", loadResort);
 </script>
 </body>
 </html>
