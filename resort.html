@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Snow Signal — Resort</title>
+<style>
+  :root{--bg:#0b0f14;--panel:#111923;--text:#e3eef7;--muted:#9fb1c6;--chip:#182333;--border:#203043;--track:#223144;}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:900px;margin:32px auto;padding:0 16px}
+  a{color:#8cc0ff;text-decoration:none}
+  header{display:flex;gap:12px;align-items:baseline;justify-content:space-between;margin-bottom:10px}
+  h1{margin:0;font-size:22px}
+  .muted{color:var(--muted);font-size:13px}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .chip{background:var(--chip);border:1px solid var(--border);border-radius:999px;padding:6px 10px;font-size:12px;color:#cfe0f2}
+  .row{display:grid;grid-template-columns:120px 1fr;align-items:center;gap:12px;margin:12px 0}
+  .label{font-weight:700;font-size:13px;color:#d6e1ee;text-transform:uppercase;letter-spacing:.04em}
+  .track{background:var(--track);height:16px;border-radius:999px;position:relative;overflow:hidden;border:1px solid var(--border)}
+  .fill{height:100%;width:0%;transition:width .55s ease}
+  .tag{position:absolute;right:8px;top:-18px;font-size:11px;color:var(--muted)}
+  .back{margin-bottom:12px;display:inline-block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">← Back to search</a>
+  <header>
+    <h1 id="title">Resort</h1>
+    <div id="subtitle" class="muted"></div>
+  </header>
+
+  <div class="panel">
+    <div id="meta" class="chips"></div>
+    <div id="bars"></div>
+    <div id="msg" class="muted" style="margin-top:10px">Loading…</div>
+  </div>
+</div>
+
+<script>
+/* ====== CONFIG (edit these) ====== */
+const PUBLISH_HTML = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pubhtml";
+const GID = "0"; // tab gid
+const COLS = {
+  resort:    "skiresort",
+  today:     "rating_td",
+  tomorrow:  "rating_tmr",
+  reasonTd:  "reason_td",    // optional
+  reasonTmr: "reason_tmr"    // optional
+};
+/* ================================== */
+
+const ratingMap = {
+  "poor":      {score:20,  color:"#d32f2f"},
+  "fair":      {score:40,  color:"#fb8c00"},
+  "good":      {score:65,  color:"#fdd835"},
+  "excellent": {score:85,  color:"#43a047"},
+  "all time":  {score:100, color:"#1e88e5"},
+  "open":      {score:80,  color:"#2e7d32"},
+  "closed":    {score:10,  color:"#9e9e9e"}
+};
+
+const lower = s => (s||"").toString().trim().toLowerCase();
+const $ = id => document.getElementById(id);
+
+function csvUrl(pubhtml,gid){
+  const u=new URL(pubhtml);
+  u.pathname=u.pathname.replace(/\/pubhtml$/,"/pub");
+  u.search="";
+  u.searchParams.set("gid",gid);
+  u.searchParams.set("single","true");
+  u.searchParams.set("output","csv");
+  return u.toString();
+}
+function parseCSV(text){
+  const rows=[], re=/\s*(?:"([^"]*(?:""[^"]*)*)"|([^,",\r\n]*))\s*(,|\r?\n|$)/g;
+  let m,row=[]; while((m=re.exec(text))!==null){
+    const val=m[1]?m[1].replace(/""/g,'"'):(m[2]||"");
+    row.push(val);
+    if(m[3]!==","){ rows.push(row); row=[]; }
+  }
+  return rows.filter(r=>r.length && !(r.length===1 && r[0]===""));
+}
+const idxMap = hdrs => {const m={}; hdrs.forEach((h,i)=>m[lower(h)]=i); return m;};
+
+function makeBar(label, rating, reason, metaEl){
+  const meta = ratingMap[lower(rating)] || {score:0,color:"#6b7c92"};
+  const row=document.createElement("div"); row.className="row";
+  const lbl=document.createElement("div"); lbl.className="label"; lbl.textContent=label;
+  const track=document.createElement("div"); track.className="track";
+  const fill=document.createElement("div"); fill.className="fill"; fill.style.width=Math.max(4,meta.score)+"%"; fill.style.background=meta.color;
+  const tag=document.createElement("div"); tag.className="tag"; tag.textContent=(rating||"—").toUpperCase();
+  track.append(fill,tag); row.append(lbl,track);
+  if (reason){
+    const chip=document.createElement("span"); chip.className="chip"; chip.textContent=reason;
+    metaEl.appendChild(chip);
+  }
+  return row;
+}
+
+(async function main(){
+  const resort = new URLSearchParams(location.search).get("resort");
+  $("title").textContent = `Snow Signal — ${resort||"Resort"}`;
+  $("subtitle").textContent = resort ? "" : "No resort selected";
+  if(!resort){ $("msg").textContent = "Choose a resort from the search page."; return; }
+
+  try{
+    const text = await fetch(csvUrl(PUBLISH_HTML, GID)).then(r=>r.text());
+    const rows = parseCSV(text);
+    if(!rows.length){ $("msg").textContent="No data."; return; }
+    const headers = rows[0], idx = idxMap(headers);
+
+    const cols = {
+      resort: idx[lower(COLS.resort)],
+      today:  idx[lower(COLS.today)],
+      tmr:    idx[lower(COLS.tomorrow)],
+      rTd:    idx[lower(COLS.reasonTd)] ?? null,
+      rTmr:   idx[lower(COLS.reasonTmr)] ?? null
+    };
+    if (cols.resort==null || cols.today==null || cols.tmr==null){
+      $("msg").textContent = `Missing headers. Need: ${COLS.resort}, ${COLS.today}, ${COLS.tomorrow}`;
+      return;
+    }
+
+    const rec = rows.slice(1).find(r => lower(r[cols.resort]) === lower(decodeURIComponent(resort)));
+    if (!rec){ $("msg").textContent = `No row found for "${resort}".`; return; }
+
+    $("title").textContent = `Snow Signal — ${rec[cols.resort]}`;
+    $("subtitle").textContent = rec[cols.resort];
+
+    const ratingTD  = (rec[cols.today] || "").trim();
+    const ratingTMR = (rec[cols.tmr]   || "").trim();
+    const reasonTD  = cols.rTd  != null ? (rec[cols.rTd]  || "").trim() : "";
+    const reasonTMR = cols.rTmr != null ? (rec[cols.rTmr] || "").trim() : "";
+
+    const metaEl = $("meta");
+    const barsEl = $("bars");
+    metaEl.innerHTML = ""; barsEl.innerHTML = "";
+    const chip = document.createElement("span"); chip.className="chip"; chip.textContent=rec[cols.resort]; metaEl.appendChild(chip);
+    barsEl.appendChild(makeBar("Today",    ratingTD,  reasonTD,  metaEl));
+    barsEl.appendChild(makeBar("Tomorrow", ratingTMR, reasonTMR, metaEl));
+    $("msg").textContent = "";
+  }catch(e){
+    console.error(e);
+    $("msg").textContent = "Failed to load sheet. Check publish URL and gid.";
+  }
+})();
+</script>
+</body>
+</html>
