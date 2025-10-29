@@ -4,368 +4,367 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Snow Signal — Resort</title>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
 <style>
   :root{
-    --bg:#070b12;           /* deep night */
-    --bg2:#0e1623;          /* panel background */
-    --glass:rgba(255,255,255,.06);
-    --glass-brd:rgba(255,255,255,.12);
-    --text:#e6eef7;
+    --bg:#0b0f14;         /* deep night */
+    --panel:#111923;      /* card bg */
+    --border:#223041;
+    --text:#e3eef7;
     --muted:#9fb1c6;
-    --accent:#7cc9ff;       /* Surfline-y blue */
-    --accent2:#6ee7b7;      /* mint */
-    --danger:#ef4444;
+    --accent:#7cc9ff;     /* ice blue */
+    --accent2:#6ee7b7;    /* mint */
     --ok:#22c55e;
     --warn:#f59e0b;
+    --danger:#ef4444;
   }
+
   *{box-sizing:border-box}
   html,body{height:100%}
   body{
-    margin:0; color:var(--text); font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-    background: radial-gradient(1200px 800px at 10% -20%, #162238 0%, transparent 60%),
-                radial-gradient(1000px 800px at 120% 20%, #0c1422 0%, transparent 55%),
-                linear-gradient(180deg, #0a1220 0%, #070b12 60%);
+    margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--text);
+    background:
+      radial-gradient(1200px 800px at 10% -20%, #162238 0%, transparent 60%),
+      radial-gradient(1000px 800px at 120% 20%, #0c1422 0%, transparent 55%),
+      linear-gradient(180deg, #0a1220 0%, #070b12 60%);
     background-attachment: fixed;
-    overflow-x:hidden;
   }
-  /* subtle animated noise */
-  .noise{position:fixed;inset:-20%;pointer-events:none;opacity:.06;mix-blend-mode:overlay;background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>');animation:grain 7s steps(10) infinite;}
-  @keyframes grain{0%{transform:translate(0,0)}10%{transform:translate(-2%, -1%)}20%{transform:translate(-1%, 1%)}30%{transform:translate(1%, -2%)}40%{transform:translate(2%,1%)}50%{transform:translate(-1%,2%)}60%{transform:translate(1%,-1%)}70%{transform:translate(0,2%)}80%{transform:translate(-2%,0)}90%{transform:translate(2%,-1%)}100%{transform:translate(0,0)}}
+  .noise{position:fixed;inset:-20%;pointer-events:none;opacity:.06;mix-blend-mode:overlay;
+    background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>');
+    animation:grain 7s steps(10) infinite;
+  }
+  @keyframes grain{0%{transform:translate(0,0)}50%{transform:translate(-1%,1%)}100%{transform:translate(0,0)}}
 
-  .wrap{max-width:1200px;margin:42px auto;padding:0 20px 64px}
+  .wrap{max-width:1200px;margin:24px auto 64px;padding:0 18px}
 
-  /* HEADER */
-  header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:18px}
-  .brand{display:flex;align-items:baseline;gap:16px}
-  h1{margin:0;font-size:44px;letter-spacing:.3px;line-height:1.05;font-weight:900}
-  .subtitle{font-size:14px;color:var(--muted)}
+  /* Header row: title left, badge right */
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:8px 0 18px}
+  .title{font-size:64px; font-weight:900; line-height:1.05; letter-spacing:.2px; margin:0}
+  .badge{
+    padding:10px 18px;border-radius:999px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;
+    background:linear-gradient(180deg, rgba(34,197,94,.2), rgba(34,197,94,.06));
+    border:1px solid rgba(34,197,94,.45); color:#d9ffea; box-shadow:0 0 0 0 rgba(34,197,94,.35);
+    animation:pulse 2.5s infinite;
+  }
+  .badge.closed{background:linear-gradient(180deg, rgba(239,68,68,.2), rgba(239,68,68,.06)); border-color:rgba(239,68,68,.45); color:#fee2e2; animation:none}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.35)} 70%{box-shadow:0 0 0 22px rgba(34,197,94,0)} 100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
 
-  .status{display:flex;gap:12px;align-items:center}
-  .badge{padding:8px 14px;border-radius:999px;font-size:14px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter: blur(8px);}
-  .badge.open{background:linear-gradient(180deg, rgba(34,197,94,.15), rgba(34,197,94,.05));border-color:rgba(34,197,94,.4);color:#dcfce7;box-shadow:0 0 0 0 rgba(34,197,94,.4);animation:pulse 2.5s infinite}
-  .badge.closed{background:linear-gradient(180deg, rgba(239,68,68,.18), rgba(239,68,68,.06));border-color:rgba(239,68,68,.4);color:#fee2e2}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.4)}70%{box-shadow:0 0 0 22px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
-  .updated{color:var(--muted);font-size:13px}
+  /* Top content row: left stats column, right map box */
+  .row{display:grid;grid-template-columns:1.2fr .8fr; gap:28px}
+  @media (max-width:1000px){.row{grid-template-columns:1fr}}
 
-  /* GRID */
-  .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:24px}
-  @media (max-width:1000px){.grid{grid-template-columns:1fr}}
+  .panel{
+    background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+    border:1px solid var(--border); border-radius:20px; padding:18px 18px 16px;
+    box-shadow:0 12px 36px rgba(0,0,0,.25); backdrop-filter: blur(8px);
+  }
+  h2{margin:8px 0 14px; font-size:22px; letter-spacing:.3px}
+  .subcap{color:var(--muted); font-size:14px; margin-top:-2px}
 
-  /* PANELS */
-  .panel{position:relative;background:var(--glass);border:1px solid var(--glass-brd);border-radius:18px;padding:20px 20px 16px;box-shadow:0 10px 30px rgba(0,0,0,.25);backdrop-filter: blur(8px)}
-  .panel h2{font-size:16px;letter-spacing:.8px;text-transform:uppercase;font-weight:800;color:#cfe5ff;margin:2px 0 10px;display:flex;align-items:center;gap:10px}
-  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-  .chip{font-size:12px;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--glass-brd);color:#cfe5ff}
+  /* Recent snow stats */
+  .stats3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:6px}
+  .stat{
+    background:linear-gradient(180deg, rgba(124,201,255,.08), rgba(124,201,255,.03));
+    border:1px solid rgba(124,201,255,.2); border-radius:14px; padding:14px 14px 12px;
+  }
+  .stat .k{font-size:13px; color:#b7c9de; text-transform:uppercase; letter-spacing:.9px}
+  .stat .v{margin-top:6px; font-size:28px; font-weight:900}
+  .seasonline{margin-top:14px; font-size:20px; font-weight:800}
 
-  /* SNOW STATS */
-  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:4px 0 16px}
-  .stat{background:linear-gradient(180deg, rgba(124,201,255,.08), rgba(124,201,255,.03));border:1px solid rgba(124,201,255,.18);border-radius:14px;padding:14px 14px 12px}
-  .stat .k{font-size:13px;color:#b7c9de;text-transform:uppercase;letter-spacing:.8px}
-  .stat .v{margin-top:6px;font-size:28px;font-weight:900}
-  @media (max-width:600px){.stats{grid-template-columns:1fr}}
+  /* Map box */
+  .mapbox{height:300px; border:1px solid var(--border); border-radius:16px; overflow:hidden; background:#0f1724}
 
-  /* 7-DAY BARS */
-  .bars{display:flex;align-items:flex-end;gap:14px;flex-wrap:nowrap;overflow:auto;padding-bottom:10px;margin-top:10px}
-  .barwrap{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;min-width:78px}
-  .bar{width:68px;border-radius:12px 12px 0 0;background:linear-gradient(180deg, rgba(124,201,255,.5), rgba(124,201,255,.1));border:1px solid rgba(124,201,255,.35);box-shadow:0 8px 24px rgba(124,201,255,.18), inset 0 -10px 20px rgba(255,255,255,.06);transition:transform .2s ease, box-shadow .2s ease, background .2s ease}
-  .barwrap:hover .bar{transform:translateY(-6px);box-shadow:0 10px 28px rgba(124,201,255,.28), inset 0 -12px 24px rgba(255,255,255,.08)}
-  .bar-lbl{font-size:12px;color:#b7c9de}
-  .bar-inch{font-size:14px;font-weight:800}
+  /* Sections below: 7 Day Outlook + Stoke Rating */
+  .section{margin-top:34px}
+  .bigcap{font-size:42px; font-weight:900; margin:0 0 12px}
+  .hint{color:var(--muted); font-size:13px; margin-bottom:10px}
 
-  /* RATINGS (now 7 cards) */
-  .ratings{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-  @media (max-width:1100px){.ratings{grid-template-columns:repeat(2,1fr)}}
-  @media (max-width:720px){.ratings{grid-template-columns:1fr}}
-  .rate{display:flex;flex-direction:column;gap:10px;padding:14px;background:linear-gradient(180deg, rgba(110,231,183,.08), rgba(110,231,183,.03));border:1px solid rgba(110,231,183,.16);border-radius:16px}
-  .stoke-row{display:flex;align-items:center;gap:10px}
-  .stoke-label{width:92px;font-size:12px;color:#b7c9de;text-transform:uppercase;letter-spacing:.8px}
-  .stoke-shell{flex:1;height:14px;border:1px solid var(--glass-brd);background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}
-  .stoke-fill{height:100%;width:0%;background:linear-gradient(90deg, var(--accent), var(--accent2));box-shadow:0 6px 18px rgba(124,201,255,.25);transition:width .6s ease}
-  .rtext{font-size:18px;font-weight:900;letter-spacing:.3px}
-  .reason{font-size:14px;color:var(--muted);min-height:22px}
+  /* Bars row (7 items) */
+  .bars{display:flex; gap:28px; flex-wrap:wrap}
+  .barwrap{display:flex; flex-direction:column; align-items:center; gap:6px; width:110px}
+  .bar{
+    width:72px; border-radius:12px 12px 0 0;
+    background:linear-gradient(180deg, rgba(124,201,255,.55), rgba(124,201,255,.12));
+    border:1px solid rgba(124,201,255,.35);
+    box-shadow:0 10px 24px rgba(124,201,255,.22), inset 0 -10px 20px rgba(255,255,255,.06);
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .barwrap:hover .bar{ transform:translateY(-6px); box-shadow:0 12px 28px rgba(124,201,255,.3), inset 0 -12px 22px rgba(255,255,255,.08)}
+  .bar-label{font-size:14px; font-weight:800}
+  .bar-inch{font-size:14px; color:var(--muted)}
 
-  /* MAP */
-  .mapbox{height:280px;border:1px solid var(--glass-brd);border-radius:14px;overflow:hidden;margin-bottom:12px}
+  /* Stoke bars (rating) */
+  .sbar{
+    width:72px; border-radius:12px 12px 0 0; border:1px solid rgba(255,255,255,.14);
+    background:linear-gradient(180deg, rgba(110,231,183,.55), rgba(110,231,183,.10));
+    box-shadow:0 10px 24px rgba(110,231,183,.20), inset 0 -10px 20px rgba(255,255,255,.06);
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .barwrap:hover .sbar{ transform:translateY(-6px); box-shadow:0 12px 28px rgba(110,231,183,.28), inset 0 -12px 22px rgba(255,255,255,.08)}
+  .rating-text{font-size:15px; font-weight:900}
+  .reason{font-size:13px; color:var(--muted); min-height:18px}
 
-  /* FOOTER */
-  footer{margin-top:26px;color:var(--muted);font-size:12px;text-align:center}
+  /* Footer */
+  footer{margin:40px 0 8px; color:var(--muted); font-size:12px; text-align:center}
   a{color:var(--accent)}
-
-  /* small layout polish */
-  .wrap{max-width:1100px;margin:16px auto;padding:0 16px 12px}
-  header{margin-bottom:8px}
-  .grid{gap:16px}
-  .bars{gap:10px;flex-wrap:wrap;overflow:hidden}
 </style>
 </head>
 <body>
 <div class="noise"></div>
+
 <div class="wrap">
   <header>
-    <div class="brand">
-      <h1 id="title">Ski Resort</h1>
-      <div class="subtitle" id="subtitle">7-day outlook • live stoke</div>
-    </div>
-    <div class="status">
-      <span class="badge" id="openBadge">—</span>
-      <span class="updated" id="updated"></span>
-    </div>
+    <h1 class="title" id="title">Ski Resort</h1>
+    <div class="badge" id="badge">Open</div>
   </header>
 
-  <div class="grid">
-    <!-- LEFT: Snow / Bars -->
+  <div class="row">
+    <!-- Left column: recent snow + season total -->
     <section class="panel">
-      <h2>Snow Overview</h2>
-      <div class="stats">
-        <div class="stat"><div class="k">Season Snowfall</div><div class="v" id="season">—</div></div>
-        <div class="stat"><div class="k">Last 24 Hours</div><div class="v" id="last24">—</div></div>
-        <div class="stat"><div class="k">Last 72 Hours</div><div class="v" id="last72">—</div></div>
+      <h2>Recent Snow</h2>
+      <div class="stats3">
+        <div class="stat"><div class="k">Last 24 hours</div><div class="v" id="last24">x in</div></div>
+        <div class="stat"><div class="k">Last 72 Hours</div><div class="v" id="last72">x in</div></div>
+        <div class="stat"><div class="k">Last 7 days</div><div class="v" id="last7">x in</div></div>
       </div>
-      <div class="bars" id="bars"></div>
+      <div class="seasonline" id="seasonLine">Season Total: x inches</div>
     </section>
 
-    <!-- RIGHT: Map + Stoke -->
+    <!-- Right column: Map -->
     <section class="panel">
-      <h2>Map & Stoke</h2>
+      <h2>Map</h2>
       <div id="map" class="mapbox"></div>
-      <div class="ratings" id="ratings"></div>
     </section>
   </div>
+
+  <!-- 7 Day Outlook -->
+  <section class="section">
+    <h3 class="bigcap">7 Day Outlook</h3>
+    <div class="hint">Today, Tomorrow, then next 5 dates • Bars scale to the biggest day</div>
+    <div class="panel">
+      <div class="bars" id="snowBars"></div>
+    </div>
+  </section>
+
+  <!-- 7 Day Stoke Rating -->
+  <section class="section">
+    <h3 class="bigcap">7 Day Stoke Rating</h3>
+    <div class="hint">Mapped from your sheet’s rating fields</div>
+    <div class="panel">
+      <div class="bars" id="stokeBars"></div>
+    </div>
+  </section>
+
+  <footer>Powered by Snow Signal</footer>
 </div>
 
-<!-- Leaflet + PapaParse -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
+/* --------- CONFIG --------- */
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv";
 
-const NEED_BASE = {
-  skiresort:["skiresort","resort","name"],
-  seasonsnow:["seasonsnow","season snow","season_total","season","season inches"],
-  last24hr:["last24hr","24h","last 24","snow24","snow_24","24hr"],
-  last72hr:["last72hr","72h","last 72","snow72","snow_72","72hr"],
-  snow24h:["snow24h","next24h","next 24","d0","today snow"],
-  tmrsnow:["tmrsnow","tomorrow","d1","day1"],
-  "3snow":["3snow","d2","day2"],
-  "4snow":["4snow","d3","day3"],
-  "5snow":["5snow","d4","day4"],
-  "6snow":["6snow","d5","day5"],
-  "7snow":["7snow","d6","day6"],
-  lat:["lat","latitude"],
-  lon:["lon","lng","longitude"],
-  openingday:["openingday","status","open","operating"],
-
-  /* legacy rating keys (fallbacks) */
-  rating_td:["rating_td","today rating","today"],
-  rating_tmr:["rating_tmr","tomorrow rating","tmr rating"],
-  rating_day3:["rating_day3","day3 rating","d3 rating"],
-  rating_day4:["rating_day4","day4 rating","d4 rating"],
-  rating_day5:["rating_day5","day5 rating","d5 rating"],
-  rating_day6:["rating_day6","day6 rating","d6 rating"],
-  rating_day7:["rating_day7","day7 rating","d7 rating"],
-
-  reason_td:["reason_td","today reason","today why"],
-  reason_tmr:["reason_tmr","tmr reason","tomorrow why"],
-  reason_day3:["reason_day3","day3 reason","d3 why"],
-  reason_day4:["reason_day4","day4 reason","d4 why"],
-  reason_day5:["reason_day5","day5 reason","d5 why"],
-  reason_day6:["reason_day6","day6 reason","d6 why"],
-  reason_day7:["reason_day7","day7 reason","d7 why"]
-};
-
+/* --------- Helpers --------- */
 const $ = id=>document.getElementById(id);
 const lower = s => (s==null?"":String(s)).trim().toLowerCase();
-const toNum = v => { const s = String(v==null?"":v).replace(/,/g,""), cleaned = s.replace(/[^0-9.+-]/g,""); const n = parseFloat(cleaned); return isNaN(n)?0:n; };
-const nice  = n => (isFinite(n) ? (Math.abs(n) >= 100 ? n.toFixed(0) : n.toFixed(1)) : "0");
-const dateLabel = i => new Date(Date.now()+i*86400000).toLocaleDateString(undefined,{month:"short",day:"numeric"});
+const toNum = v => { const s = String(v==null?"":v).replace(/,/g,""); const n = parseFloat(s.replace(/[^0-9.+-]/g,"")); return isNaN(n)?0:n; };
+const nice = n => (isFinite(n) ? (Math.abs(n)>=100? n.toFixed(0) : n.toFixed(1)) : "0");
+const labelDate = i => new Date(Date.now()+i*86400000).toLocaleDateString(undefined,{month:"short",day:"numeric"});
 const isoDate = i => new Date(Date.now()+i*86400000).toISOString().slice(0,10);
 
-function ratingStyle(r){
-  const key = lower(r||'');
-  const pct = {poor:18,fair:42,good:68,excellent:88,"all time":100,closed:0}[key] ?? 0;
-  const col = {poor:'#ef4444',fair:'#f59e0b',good:'#84cc16',excellent:'#22c55e','all time':'#16a34a',closed:'#94a3b8'}[key] ?? '#94a3b8';
-  return {pct,col,word: r||'—'};
-}
-function titleCase(s){ return String(s||'').split(' ').map(w=> w? (w[0].toUpperCase()+w.slice(1)) : '').join(' '); }
-function setBadge(status){
-  const badge = $("openBadge");
-  const up = $("updated");
-  const s = (status||"").toString().trim().toUpperCase();
-  const open = s === "OPEN";
-  badge.textContent = open? "OPEN" : (s||"STATUS N/A");
-  badge.className = "badge "+(open?"open":"closed");
-  up.textContent = "Powered by Snow Signal";
+/* Map rating words to height/color */
+function ratingMeta(r){
+  const k = lower(r||"");
+  const pct = { "poor":18, "fair":42, "good":68, "excellent":88, "all time":100, "closed": 6 }[k] ?? 0;
+  const col = { "poor":"#ef4444", "fair":"#f59e0b", "good":"#84cc16", "excellent":"#22c55e", "all time":"#16a34a", "closed":"#94a3b8" }[k] ?? "#94a3b8";
+  return {pct, col, word: (r || "—")};
 }
 
-function setStokeBar(fillEl, ratingTextEl, ratingVal){
-  const {pct,col,word} = ratingStyle(ratingVal);
-  fillEl.style.background = `linear-gradient(90deg, ${col}, var(--accent2))`;
-  fillEl.style.width = '0%';
-  requestAnimationFrame(()=>{ fillEl.style.width = Math.max(0,Math.min(100,pct))+"%"; });
-  ratingTextEl.textContent = titleCase(word);
-}
-
-/* Flexible header matching */
-function buildHeaderFinder(fields){
-  const lowers = fields.map(f=>({raw:f, low:lower(f)}));
+/* Flexible header resolver */
+function buildFinder(fields){
+  const lows = fields.map(f=>({raw:f, low:lower(f)}));
   return (cands)=>{
     const arr = Array.isArray(cands)?cands:[cands];
-    for(const c of arr){ const ex = lowers.find(o=> o.low === lower(c)); if(ex) return ex.raw; }
-    for(const c of arr){ const ct = lowers.find(o=> o.low.includes(lower(c))); if(ct) return ct.raw; }
+    for(const c of arr){ const ex = lows.find(o=> o.low === lower(c)); if(ex) return ex.raw; }
+    for(const c of arr){ const ct = lows.find(o=> o.low.includes(lower(c))); if(ct) return ct.raw; }
     return null;
   };
 }
 
-/* Try exact field name (lowercased) first, then fuzzy candidates */
-function getCell(row, fields, exactLower, fallbackCandidates){
-  const exact = fields.find(h => lower(h) === exactLower);
-  if (exact && row[exact] != null && row[exact] !== "") return row[exact];
-  const findHeader = buildHeaderFinder(fields);
-  const h = findHeader(fallbackCandidates);
-  return h ? row[h] : "";
-}
-
+/* --------- Main --------- */
 async function main(){
   const resortQ = new URLSearchParams(location.search).get("resort") || "";
   const resp = await fetch(CSV_URL, {cache:"no-store"});
-  const csv  = await resp.text();
+  const csv = await resp.text();
   const parsed = Papa.parse(csv,{header:true,skipEmptyLines:true});
   const fields = parsed.meta.fields || [];
-  const findHeader = buildHeaderFinder(fields);
-  const NEED = {};
-  for(const [k,c] of Object.entries(NEED_BASE)) NEED[k] = findHeader(c);
   const rows = parsed.data || [];
-  let row = null;
-  if(resortQ && NEED.skiresort) row = rows.find(r => lower(r[NEED.skiresort]) === lower(resortQ));
-  if(!row) row = rows[0];
-  if(!row){ alert('No data rows found.'); return; }
+  if(!fields.length || !rows.length){ alert("No data found in sheet."); return; }
+  const find = buildFinder(fields);
 
-  $("title").textContent = (NEED.skiresort && row[NEED.skiresort]) || resortQ || "Ski Resort";
-  setBadge(NEED.openingday ? row[NEED.openingday] : "");
+  // Resolve headers we care about
+  const H = {
+    skiresort: find(["skiresort","resort","name"]),
+    last24hr: find(["last24hr","last 24","24h","snow24"]),
+    last72hr: find(["last72hr","last 72","72h","snow72"]),
+    last7days: find(["last7days","last 7","7d"]),
+    seasonsnow: find(["seasonsnow","season total","season inches","season"]),
+    lat: find(["lat","latitude"]),
+    lon: find(["lon","lng","longitude"]),
+    openingday: find(["openingday","open","status"]),
 
-  // Left stats
-  $("season").textContent = NEED.seasonsnow && row[NEED.seasonsnow] != null ? nice(toNum(row[NEED.seasonsnow]))+" in" : "—";
-  $("last24").textContent = NEED.last24hr   && row[NEED.last24hr]   != null ? nice(toNum(row[NEED.last24hr]))+" in"   : "—";
-  $("last72").textContent = NEED.last72hr   && row[NEED.last72hr]   != null ? nice(toNum(row[NEED.last72hr]))+" in"   : "—";
+    // snowfall forecast per day (today rolling, then calendar days)
+    snow24h: find(["snow24h","next24h","today snow","d0"]),
+    tmrsnow: find(["tmrsnow","tomorrow","d1"]),
+    d3: find(["3snow","day2","d2"]),
+    d4: find(["4snow","day3","d3"]),
+    d5: find(["5snow","day4","d4"]),
+    d6: find(["6snow","day5","d5"]),
+    d7: find(["7snow","day6","d6"]),
+  };
 
-  // Bars 7-day (Today, Tomorrow, then dates)
-  const seq = [
-    {key:NEED.snow24h, label:"Today"},
-    {key:NEED.tmrsnow, label:"Tomorrow"},
-    {key:NEED["3snow"], label:dateLabel(2)},
-    {key:NEED["4snow"], label:dateLabel(3)},
-    {key:NEED["5snow"], label:dateLabel(4)},
-    {key:NEED["6snow"], label:dateLabel(5)},
-    {key:NEED["7snow"], label:dateLabel(6)},
-  ].filter(s=>!!s.key);
-  const vals = seq.map(s=> toNum(row[s.key]));
-  const max  = Math.max(6, ...vals);
-  $("bars").innerHTML = seq.map((s,i)=>{
-    const v = vals[i], h = (v/max)*220;
-    return `<div class="barwrap">
-      <div class="bar" style="height:${h}px"></div>
-      <div class="bar-lbl">${s.label}</div>
-      <div class="bar-inch">${nice(v)} in</div>
-    </div>`;
-  }).join('');
+  // pick row by ?resort= query if present
+  let row = rows[0];
+  if(resortQ && H.skiresort){
+    const found = rows.find(r => lower(r[H.skiresort]) === lower(resortQ));
+    if(found) row = found;
+  }
 
-  // Ratings (7 cards) — Today, Tomorrow, then ISO dates for next 5
-  const labels = [
-    {slug:"today",     display:"Today"},
-    {slug:"tomorrow",  display:"Tomorrow"},
-    {slug:isoDate(2),  display:dateLabel(2)},
-    {slug:isoDate(3),  display:dateLabel(3)},
-    {slug:isoDate(4),  display:dateLabel(4)},
-    {slug:isoDate(5),  display:dateLabel(5)},
-    {slug:isoDate(6),  display:dateLabel(6)},
+  // Header title + badge
+  $("title").textContent = (H.skiresort && row[H.skiresort]) || "Ski Resort";
+  const badge = $("badge");
+  const rawOpen = (H.openingday && row[H.openingday]) ? String(row[H.openingday]).trim() : "";
+  const isOpen = rawOpen.toUpperCase()==="OPEN" || rawOpen==="";
+  badge.textContent = isOpen ? "Open" : rawOpen;
+  badge.classList.toggle("closed", !isOpen);
+
+  // Recent snow & season
+  const v24 = H.last24hr ? toNum(row[H.last24hr]) : 0;
+  const v72 = H.last72hr ? toNum(row[H.last72hr]) : 0;
+  const v7d = H.last7days ? toNum(row[H.last7days]) : 0;
+  $("last24").textContent = nice(v24) + " in";
+  $("last72").textContent = nice(v72) + " in";
+  $("last7").textContent  = nice(v7d)  + " in";
+  const season = H.seasonsnow ? toNum(row[H.seasonsnow]) : 0;
+  $("seasonLine").textContent = "Season Total: " + nice(season) + " inches";
+
+  // Map
+  const lat = H.lat ? toNum(row[H.lat]) : NaN;
+  const lon = H.lon ? toNum(row[H.lon]) : NaN;
+  if(!isNaN(lat) && !isNaN(lon) && Math.abs(lat)>0 && Math.abs(lon)>0){
+    const map = L.map('map',{zoomControl:false}).setView([lat,lon], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18, attribution:'© OpenStreetMap'}).addTo(map);
+    L.marker([lat,lon]).addTo(map).bindPopup((H.skiresort && row[H.skiresort])||"Resort");
+    setTimeout(()=> map.invalidateSize(), 150);
+  }else{
+    $("map").innerHTML = '<div style="padding:12px;color:#9fb1c6">No coordinates found in sheet.</div>';
+  }
+
+  /* ---- 7 Day Outlook bars ---- */
+  const snowSeq = [
+    { key:H.snow24h, label:"Today" },
+    { key:H.tmrsnow, label:"Tomorrow" },
+    { key:H.d3, label:labelDate(2) },
+    { key:H.d4, label:labelDate(3) },
+    { key:H.d5, label:labelDate(4) },
+    { key:H.d6, label:labelDate(5) },
+    { key:H.d7, label:labelDate(6) },
+  ].filter(x=> !!x.key);
+
+  const snowVals = snowSeq.map(s => toNum(row[s.key]));
+  const snowMax  = Math.max(6, ...snowVals);
+  $("snowBars").innerHTML = snowSeq.map((s, i) => {
+    const v = snowVals[i];
+    const h = Math.max(6, (v / snowMax) * 220); // up to 220px height
+    return `
+      <div class="barwrap">
+        <div class="bar" style="height:${h}px"></div>
+        <div class="bar-label">${s.label}</div>
+        <div class="bar-inch">${nice(v)} in</div>
+      </div>
+    `;
+  }).join("");
+
+  /* ---- 7 Day Stoke Rating ----
+     We support:
+     - rating_today / rating_tomorrow / rating_YYYY-MM-DD
+     - legacy rating_td / rating_tmr / rating_day3..day7
+  */
+  const ratingLabels = [
+    { slug:"today",    display:"Today" },
+    { slug:"tomorrow", display:"Tomorrow" },
+    { slug:isoDate(2), display:labelDate(2) },
+    { slug:isoDate(3), display:labelDate(3) },
+    { slug:isoDate(4), display:labelDate(4) },
+    { slug:isoDate(5), display:labelDate(5) },
+    { slug:isoDate(6), display:labelDate(6) },
   ];
 
-  // Build cards
-  const ratingsEl = $("ratings");
-  ratingsEl.innerHTML = labels.map((lab, idx) => `
-    <div class="rate">
-      <div class="stoke-row">
-        <div class="stoke-label">${lab.display}</div>
-        <div class="stoke-shell"><div class="stoke-fill" id="stoke-${idx}"></div></div>
-      </div>
-      <div class="rtext" id="rt-${idx}">—</div>
-      <div class="reason" id="rs-${idx}"></div>
-    </div>
-  `).join('');
+  function getField(exactLower, cands){
+    const exact = fields.find(h => lower(h) === exactLower);
+    if (exact) return exact;
+    const find = buildFinder(fields);
+    return find(cands) || null;
+  }
 
-  // Resolve rating/reason per label
-  labels.forEach((lab, idx) => {
-    let ratingVal = "";
-    let reasonVal = "";
-    if (lab.slug === "today") {
-      ratingVal = getCell(row, fields, "rating_today",  NEED.rating_td || ["rating_td","today rating","today"]);
-      reasonVal = getCell(row, fields, "reason_today",  NEED.reason_td || ["reason_td","today reason","today why"]);
-    } else if (lab.slug === "tomorrow") {
-      ratingVal = getCell(row, fields, "rating_tomorrow", NEED.rating_tmr || ["rating_tmr","tomorrow rating","tmr rating"]);
-      reasonVal = getCell(row, fields, "reason_tomorrow", NEED.reason_tmr || ["reason_tmr","tmr reason","tomorrow why"]);
-    } else {
-      // Prefer date-based columns like rating_YYYY-MM-DD, reason_YYYY-MM-DD
-      const rexact = `rating_${lab.slug}`;
-      const reaxct = `reason_${lab.slug}`;
-      ratingVal = getCell(row, fields, rexact, []);
-      reasonVal = getCell(row, fields, reaxct, []);
-      // Fallback to legacy dayN names if empty
-      if (!ratingVal) {
-        const dayIdx = labels.indexOf(lab); // 2..6
-        const legacyDay = dayIdx + 1; // 3..7
-        const rKey = NEED[`rating_day${legacyDay}`] || [`rating_day${legacyDay}`, `day${legacyDay} rating`, `d${legacyDay} rating`];
-        const sKey = NEED[`reason_day${legacyDay}`] || [`reason_day${legacyDay}`, `day${legacyDay} reason`, `d${legacyDay} why`];
-        ratingVal = getCell(row, fields, `rating_day${legacyDay}`, rKey);
-        reasonVal = getCell(row, fields, `reason_day${legacyDay}`, sKey);
-      }
+  function getCell(exactLower, fallbacks){
+    const name = getField(exactLower, fallbacks);
+    return name ? row[name] : "";
+  }
+
+  function legacyKeys(idx){ // idx: 0..6 -> td/tmr/day3..7
+    if (idx===0) return { r:["rating_td","today rating"], s:["reason_td","today reason"] };
+    if (idx===1) return { r:["rating_tmr","tomorrow rating"], s:["reason_tmr","tmr reason"] };
+    const d = idx+1; // 3..7
+    return { r:[`rating_day${d}`, `day${d} rating`, `d${d} rating`],
+             s:[`reason_day${d}`, `day${d} reason`, `d${d} why`] };
+  }
+
+  const stokeHtml = ratingLabels.map((lab, idx) => {
+    // Prefer date-based fields first
+    let rating = getCell(`rating_${lab.slug}`, []);
+    let reason = getCell(`reason_${lab.slug}`, []);
+
+    if(!rating){ // fallback to legacy
+      const L = legacyKeys(idx);
+      rating = getCell(`rating_${idx===0?'today':idx===1?'tomorrow':`day${idx+1}`}`, L.r);
+      reason = getCell(`reason_${idx===0?'today':idx===1?'tomorrow':`day${idx+1}`}`, L.s);
     }
 
-    // If openingday is a future date, mark days before it closed.
-    const openingRaw = NEED.openingday ? (row[NEED.openingday] || "").toString().trim() : "";
-    const openingUpper = openingRaw.toUpperCase();
-    const isOpenWord = openingUpper === "OPEN";
+    // Opening logic → closed before opening day
     let closed = false;
-    if (!isOpenWord && openingRaw) {
-      const tryDate = new Date(openingRaw);
-      if (!isNaN(tryDate)) {
-        const labelDate = (lab.slug==="today") ? new Date()
-          : (lab.slug==="tomorrow") ? new Date(Date.now()+86400000)
-          : new Date(lab.slug+"T00:00:00");
-        if (labelDate < new Date(tryDate.toISOString().slice(0,10)+"T00:00:00")) closed = true;
+    const opRaw = rawOpen;
+    if(opRaw && opRaw.toUpperCase()!=="OPEN"){
+      const opDate = new Date(opRaw);
+      if(!isNaN(opDate)){
+        const thisDate = (idx===0) ? new Date() : (idx===1) ? new Date(Date.now()+86400000) : new Date(lab.slug+"T00:00:00");
+        const opMid = new Date(opDate.toISOString().slice(0,10)+"T00:00:00");
+        if(thisDate < opMid) closed = true;
       }
-    } else if (!isOpenWord && !openingRaw) {
-      // Unknown opening => consider closed
+    } else if(!opRaw){ // unknown -> assume closed
       closed = true;
     }
 
-    const fillEl = document.getElementById(`stoke-${idx}`);
-    const txtEl  = document.getElementById(`rt-${idx}`);
-    const rsEl   = document.getElementById(`rs-${idx}`);
+    const meta = ratingMeta(closed ? "closed" : rating);
+    const h = Math.max(6, (meta.pct/100) * 220);
+    const col = meta.col;
+    return `
+      <div class="barwrap">
+        <div class="sbar" style="height:${h}px; background:linear-gradient(180deg, ${col}88, ${col}22); border-color:${col}55;"></div>
+        <div class="bar-label">${lab.display}</div>
+        <div class="rating-text">${(meta.word||'').toString().split(' ').map(w=> w? (w[0].toUpperCase()+w.slice(1)) : '').join(' ')}</div>
+        <div class="reason">${(reason||"").toString()}</div>
+      </div>
+    `;
+  }).join("");
 
-    if (closed) {
-      setStokeBar(fillEl, txtEl, "closed");
-      rsEl.textContent = "resort closed";
-    } else {
-      setStokeBar(fillEl, txtEl, ratingVal || "");
-      rsEl.textContent = (reasonVal || "").toString();
-    }
-  });
-
-  // Map
-  const lat = NEED.lat ? toNum(row[NEED.lat]) : NaN;
-  const lon = NEED.lon ? toNum(row[NEED.lon]) : NaN;
-  if(!isNaN(lat) && !isNaN(lon) && Math.abs(lat)>0 && Math.abs(lon)>0){
-    const map = L.map('map',{zoomControl:false}).setView([lat,lon], 10);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18, attribution:'&copy; OpenStreetMap'}).addTo(map);
-    L.marker([lat,lon]).addTo(map).bindPopup((NEED.skiresort && row[NEED.skiresort])||'Resort');
-    setTimeout(()=> map.invalidateSize(), 200);
-  } else {
-    document.getElementById('map').innerHTML = '<div style="padding:12px;color:#9fb1c6">No coordinates found in sheet.</div>';
-  }
+  $("stokeBars").innerHTML = stokeHtml;
 }
 
 window.addEventListener('load', main);
