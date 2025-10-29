@@ -75,38 +75,30 @@
   .bar-lbl{font-size:12px;color:#b7c9de}
   .bar-inch{font-size:14px;font-weight:800}
 
-  /* TOOLTIP */
-  .tip{position:absolute;bottom:100%;transform:translateY(-8px);background:#0b1422;border:1px solid var(--glass-brd);padding:10px 12px;border-radius:12px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s ease;box-shadow:0 10px 30px rgba(0,0,0,.35)}
-  .barwrap:hover .tip{opacity:1}
-
-  /* RATINGS – circular gauges */
+  /* RATINGS (now 7 cards) */
   .ratings{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-  @media (max-width:820px){.ratings{grid-template-columns:1fr}}
-  .rate{display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px;background:linear-gradient(180deg, rgba(110,231,183,.08), rgba(110,231,183,.03));border:1px solid rgba(110,231,183,.16);border-radius:16px}
-  .cap{font-size:12px;color:#b7c9de;text-transform:uppercase;letter-spacing:.8px}
+  @media (max-width:1100px){.ratings{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:720px){.ratings{grid-template-columns:1fr}}
+  .rate{display:flex;flex-direction:column;gap:10px;padding:14px;background:linear-gradient(180deg, rgba(110,231,183,.08), rgba(110,231,183,.03));border:1px solid rgba(110,231,183,.16);border-radius:16px}
+  .stoke-row{display:flex;align-items:center;gap:10px}
+  .stoke-label{width:92px;font-size:12px;color:#b7c9de;text-transform:uppercase;letter-spacing:.8px}
+  .stoke-shell{flex:1;height:14px;border:1px solid var(--glass-brd);background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}
+  .stoke-fill{height:100%;width:0%;background:linear-gradient(90deg, var(--accent), var(--accent2));box-shadow:0 6px 18px rgba(124,201,255,.25);transition:width .6s ease}
   .rtext{font-size:18px;font-weight:900;letter-spacing:.3px}
-  .reason{font-size:14px;color:var(--muted);text-align:center;min-height:22px}
+  .reason{font-size:14px;color:var(--muted);min-height:22px}
 
-  .gauge{width:160px;height:160px;display:block}
-  .g-wrap{position:relative}
-  .g-label{position:absolute;inset:0;display:grid;place-items:center;font-weight:900;font-size:28px}
+  /* MAP */
+  .mapbox{height:280px;border:1px solid var(--glass-brd);border-radius:14px;overflow:hidden;margin-bottom:12px}
 
   /* FOOTER */
   footer{margin-top:26px;color:var(--muted);font-size:12px;text-align:center}
   a{color:var(--accent)}
-.hbar-shell{width:100%;height:16px;border:1px solid var(--glass-brd);background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden;margin-top:4px}
-.hbar{height:100%;width:0%;background:linear-gradient(90deg, var(--accent), var(--accent2));box-shadow:0 6px 18px rgba(124,201,255,.25);transition:width .6s ease}
-.pcent{font-size:12px;color:#cfe5ff;margin-top:4px;font-weight:800}
-.g-wrap,.gauge,.g-label{display:none!important}
-.wrap{max-width:1100px;margin:16px auto;padding:0 16px 12px}
-header{margin-bottom:8px}
-.grid{gap:16px}
-.bars{gap:10px;flex-wrap:wrap;overflow:hidden}
-.mapbox{height:280px;border:1px solid var(--glass-brd);border-radius:14px;overflow:hidden;margin-bottom:12px}
-.stoke-row{display:flex;align-items:center;gap:10px}
-.stoke-label{width:88px;font-size:12px;color:#b7c9de;text-transform:uppercase;letter-spacing:.8px}
-.stoke-shell{flex:1;height:14px;border:1px solid var(--glass-brd);background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}
-.stoke-fill{height:100%;width:0%;background:linear-gradient(90deg, var(--accent), var(--accent2));box-shadow:0 6px 18px rgba(124,201,255,.25);transition:width .6s ease}
+
+  /* small layout polish */
+  .wrap{max-width:1100px;margin:16px auto;padding:0 16px 12px}
+  header{margin-bottom:8px}
+  .grid{gap:16px}
+  .bars{gap:10px;flex-wrap:wrap;overflow:hidden}
 </style>
 </head>
 <body>
@@ -115,7 +107,7 @@ header{margin-bottom:8px}
   <header>
     <div class="brand">
       <h1 id="title">Ski Resort</h1>
-      <div class="subtitle" id="subtitle">7‑day outlook • live stoke</div>
+      <div class="subtitle" id="subtitle">7-day outlook • live stoke</div>
     </div>
     <div class="status">
       <span class="badge" id="openBadge">—</span>
@@ -132,7 +124,6 @@ header{margin-bottom:8px}
         <div class="stat"><div class="k">Last 24 Hours</div><div class="v" id="last24">—</div></div>
         <div class="stat"><div class="k">Last 72 Hours</div><div class="v" id="last72">—</div></div>
       </div>
-      
       <div class="bars" id="bars"></div>
     </section>
 
@@ -140,45 +131,19 @@ header{margin-bottom:8px}
     <section class="panel">
       <h2>Map & Stoke</h2>
       <div id="map" class="mapbox"></div>
-      <div class="ratings">
-        <div class="rate">
-          <div class="stoke-row">
-            <div class="stoke-label">Today</div>
-            <div class="stoke-shell"><div class="stoke-fill" id="stoke-td"></div></div>
-          </div>
-          <div class="rtext" id="rt-td">—</div>
-          <div class="reason" id="rs-td"></div>
-        </div>
-        <div class="rate">
-          <div class="stoke-row">
-            <div class="stoke-label">Tomorrow</div>
-            <div class="stoke-shell"><div class="stoke-fill" id="stoke-tmr"></div></div>
-          </div>
-          <div class="rtext" id="rt-tmr">—</div>
-          <div class="reason" id="rs-tmr"></div>
-        </div>
-        <div class="rate">
-          <div class="stoke-row">
-            <div class="stoke-label">Day 3</div>
-            <div class="stoke-shell"><div class="stoke-fill" id="stoke-d3"></div></div>
-          </div>
-          <div class="rtext" id="rt-d3">—</div>
-          <div class="reason" id="rs-d3"></div>
-        </div>
-      </div>
+      <div class="ratings" id="ratings"></div>
     </section>
   </div>
-
-  
 </div>
 
-<!-- Leaflet (map) + PapaParse -->
+<!-- Leaflet + PapaParse -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv";
-const NEED = {
+
+const NEED_BASE = {
   skiresort:["skiresort","resort","name"],
   seasonsnow:["seasonsnow","season snow","season_total","season","season inches"],
   last24hr:["last24hr","24h","last 24","snow24","snow_24","24hr"],
@@ -193,23 +158,36 @@ const NEED = {
   lat:["lat","latitude"],
   lon:["lon","lng","longitude"],
   openingday:["openingday","status","open","operating"],
+
+  /* legacy rating keys (fallbacks) */
   rating_td:["rating_td","today rating","today"],
   rating_tmr:["rating_tmr","tomorrow rating","tmr rating"],
   rating_day3:["rating_day3","day3 rating","d3 rating"],
+  rating_day4:["rating_day4","day4 rating","d4 rating"],
+  rating_day5:["rating_day5","day5 rating","d5 rating"],
+  rating_day6:["rating_day6","day6 rating","d6 rating"],
+  rating_day7:["rating_day7","day7 rating","d7 rating"],
+
   reason_td:["reason_td","today reason","today why"],
   reason_tmr:["reason_tmr","tmr reason","tomorrow why"],
-  reason_day3:["reason_day3","day3 reason","d3 why"]
+  reason_day3:["reason_day3","day3 reason","d3 why"],
+  reason_day4:["reason_day4","day4 reason","d4 why"],
+  reason_day5:["reason_day5","day5 reason","d5 why"],
+  reason_day6:["reason_day6","day6 reason","d6 why"],
+  reason_day7:["reason_day7","day7 reason","d7 why"]
 };
+
 const $ = id=>document.getElementById(id);
 const lower = s => (s==null?"":String(s)).trim().toLowerCase();
 const toNum = v => { const s = String(v==null?"":v).replace(/,/g,""), cleaned = s.replace(/[^0-9.+-]/g,""); const n = parseFloat(cleaned); return isNaN(n)?0:n; };
 const nice  = n => (isFinite(n) ? (Math.abs(n) >= 100 ? n.toFixed(0) : n.toFixed(1)) : "0");
-const dPlus = i => new Date(Date.now()+i*86400000).toLocaleDateString(undefined,{month:"short",day:"numeric"});
+const dateLabel = i => new Date(Date.now()+i*86400000).toLocaleDateString(undefined,{month:"short",day:"numeric"});
+const isoDate = i => new Date(Date.now()+i*86400000).toISOString().slice(0,10);
 
 function ratingStyle(r){
   const key = lower(r||'');
-  const pct = {poor:18,fair:42,good:68,excellent:88,"all time":100}[key] ?? 0;
-  const col = {poor:'#ef4444',fair:'#f59e0b',good:'#84cc16',excellent:'#22c55e','all time':'#16a34a'}[key] ?? '#94a3b8';
+  const pct = {poor:18,fair:42,good:68,excellent:88,"all time":100,closed:0}[key] ?? 0;
+  const col = {poor:'#ef4444',fair:'#f59e0b',good:'#84cc16',excellent:'#22c55e','all time':'#16a34a',closed:'#94a3b8'}[key] ?? '#94a3b8';
   return {pct,col,word: r||'—'};
 }
 function titleCase(s){ return String(s||'').split(' ').map(w=> w? (w[0].toUpperCase()+w.slice(1)) : '').join(' '); }
@@ -220,13 +198,35 @@ function setBadge(status){
   const open = s === "OPEN";
   badge.textContent = open? "OPEN" : (s||"STATUS N/A");
   badge.className = "badge "+(open?"open":"closed");
-  up.textContent = "Powered by Pow Signal";
+  up.textContent = "Powered by Snow Signal";
 }
-function setStoke(idFill, idText, rating){
-  const {pct,col,word} = ratingStyle(rating);
-  const el = document.getElementById(idFill);
-  if(el){ el.style.background = `linear-gradient(90deg, ${col}, var(--accent2))`; el.style.width = '0%'; requestAnimationFrame(()=>{ el.style.width = Math.max(0,Math.min(100,pct))+"%"; }); }
-  if(idText) document.getElementById(idText).textContent = titleCase(word);
+
+function setStokeBar(fillEl, ratingTextEl, ratingVal){
+  const {pct,col,word} = ratingStyle(ratingVal);
+  fillEl.style.background = `linear-gradient(90deg, ${col}, var(--accent2))`;
+  fillEl.style.width = '0%';
+  requestAnimationFrame(()=>{ fillEl.style.width = Math.max(0,Math.min(100,pct))+"%"; });
+  ratingTextEl.textContent = titleCase(word);
+}
+
+/* Flexible header matching */
+function buildHeaderFinder(fields){
+  const lowers = fields.map(f=>({raw:f, low:lower(f)}));
+  return (cands)=>{
+    const arr = Array.isArray(cands)?cands:[cands];
+    for(const c of arr){ const ex = lowers.find(o=> o.low === lower(c)); if(ex) return ex.raw; }
+    for(const c of arr){ const ct = lowers.find(o=> o.low.includes(lower(c))); if(ct) return ct.raw; }
+    return null;
+  };
+}
+
+/* Try exact field name (lowercased) first, then fuzzy candidates */
+function getCell(row, fields, exactLower, fallbackCandidates){
+  const exact = fields.find(h => lower(h) === exactLower);
+  if (exact && row[exact] != null && row[exact] !== "") return row[exact];
+  const findHeader = buildHeaderFinder(fields);
+  const h = findHeader(fallbackCandidates);
+  return h ? row[h] : "";
 }
 
 async function main(){
@@ -235,37 +235,32 @@ async function main(){
   const csv  = await resp.text();
   const parsed = Papa.parse(csv,{header:true,skipEmptyLines:true});
   const fields = parsed.meta.fields || [];
-  const lowers = fields.map(f=>({raw:f, low:lower(f)}));
-  const findHeader = (cands)=>{
-    const arr = Array.isArray(cands)?cands:[cands];
-    for(const c of arr){ const ex = lowers.find(o=> o.low === lower(c)); if(ex) return ex.raw; }
-    for(const c of arr){ const ct = lowers.find(o=> o.low.includes(lower(c))); if(ct) return ct.raw; }
-    return null;
-  };
-  const H = {}; for(const [k,c] of Object.entries(NEED)) H[k] = findHeader(c);
+  const findHeader = buildHeaderFinder(fields);
+  const NEED = {};
+  for(const [k,c] of Object.entries(NEED_BASE)) NEED[k] = findHeader(c);
   const rows = parsed.data || [];
   let row = null;
-  if(resortQ && H.skiresort) row = rows.find(r => lower(r[H.skiresort]) === lower(resortQ));
+  if(resortQ && NEED.skiresort) row = rows.find(r => lower(r[NEED.skiresort]) === lower(resortQ));
   if(!row) row = rows[0];
   if(!row){ alert('No data rows found.'); return; }
 
-  $("title").textContent = (H.skiresort && row[H.skiresort]) || resortQ || "Ski Resort";
-  setBadge(H.openingday ? row[H.openingday] : "");
+  $("title").textContent = (NEED.skiresort && row[NEED.skiresort]) || resortQ || "Ski Resort";
+  setBadge(NEED.openingday ? row[NEED.openingday] : "");
 
   // Left stats
-  $("season").textContent = H.seasonsnow && row[H.seasonsnow] != null ? nice(toNum(row[H.seasonsnow]))+" in" : "—";
-  $("last24").textContent = H.last24hr   && row[H.last24hr]   != null ? nice(toNum(row[H.last24hr]))+" in"   : "—";
-  $("last72").textContent = H.last72hr   && row[H.last72hr]   != null ? nice(toNum(row[H.last72hr]))+" in"   : "—";
+  $("season").textContent = NEED.seasonsnow && row[NEED.seasonsnow] != null ? nice(toNum(row[NEED.seasonsnow]))+" in" : "—";
+  $("last24").textContent = NEED.last24hr   && row[NEED.last24hr]   != null ? nice(toNum(row[NEED.last24hr]))+" in"   : "—";
+  $("last72").textContent = NEED.last72hr   && row[NEED.last72hr]   != null ? nice(toNum(row[NEED.last72hr]))+" in"   : "—";
 
-  // Bars 7-day
+  // Bars 7-day (Today, Tomorrow, then dates)
   const seq = [
-    {key:H.snow24h, label:"Next 24h"},
-    {key:H.tmrsnow, label:dPlus(1)},
-    {key:H["3snow"], label:dPlus(2)},
-    {key:H["4snow"], label:dPlus(3)},
-    {key:H["5snow"], label:dPlus(4)},
-    {key:H["6snow"], label:dPlus(5)},
-    {key:H["7snow"], label:dPlus(6)},
+    {key:NEED.snow24h, label:"Today"},
+    {key:NEED.tmrsnow, label:"Tomorrow"},
+    {key:NEED["3snow"], label:dateLabel(2)},
+    {key:NEED["4snow"], label:dateLabel(3)},
+    {key:NEED["5snow"], label:dateLabel(4)},
+    {key:NEED["6snow"], label:dateLabel(5)},
+    {key:NEED["7snow"], label:dateLabel(6)},
   ].filter(s=>!!s.key);
   const vals = seq.map(s=> toNum(row[s.key]));
   const max  = Math.max(6, ...vals);
@@ -278,23 +273,101 @@ async function main(){
     </div>`;
   }).join('');
 
-  // Stoke bars
-  setStoke('stoke-td','rt-td',   H.rating_td   ? row[H.rating_td]   : '');
-  setStoke('stoke-tmr','rt-tmr', H.rating_tmr  ? row[H.rating_tmr]  : '');
-  setStoke('stoke-d3','rt-d3',   H.rating_day3 ? row[H.rating_day3] : '');
+  // Ratings (7 cards) — Today, Tomorrow, then ISO dates for next 5
+  const labels = [
+    {slug:"today",     display:"Today"},
+    {slug:"tomorrow",  display:"Tomorrow"},
+    {slug:isoDate(2),  display:dateLabel(2)},
+    {slug:isoDate(3),  display:dateLabel(3)},
+    {slug:isoDate(4),  display:dateLabel(4)},
+    {slug:isoDate(5),  display:dateLabel(5)},
+    {slug:isoDate(6),  display:dateLabel(6)},
+  ];
+
+  // Build cards
+  const ratingsEl = $("ratings");
+  ratingsEl.innerHTML = labels.map((lab, idx) => `
+    <div class="rate">
+      <div class="stoke-row">
+        <div class="stoke-label">${lab.display}</div>
+        <div class="stoke-shell"><div class="stoke-fill" id="stoke-${idx}"></div></div>
+      </div>
+      <div class="rtext" id="rt-${idx}">—</div>
+      <div class="reason" id="rs-${idx}"></div>
+    </div>
+  `).join('');
+
+  // Resolve rating/reason per label
+  labels.forEach((lab, idx) => {
+    let ratingVal = "";
+    let reasonVal = "";
+    if (lab.slug === "today") {
+      ratingVal = getCell(row, fields, "rating_today",  NEED.rating_td || ["rating_td","today rating","today"]);
+      reasonVal = getCell(row, fields, "reason_today",  NEED.reason_td || ["reason_td","today reason","today why"]);
+    } else if (lab.slug === "tomorrow") {
+      ratingVal = getCell(row, fields, "rating_tomorrow", NEED.rating_tmr || ["rating_tmr","tomorrow rating","tmr rating"]);
+      reasonVal = getCell(row, fields, "reason_tomorrow", NEED.reason_tmr || ["reason_tmr","tmr reason","tomorrow why"]);
+    } else {
+      // Prefer date-based columns like rating_YYYY-MM-DD, reason_YYYY-MM-DD
+      const rexact = `rating_${lab.slug}`;
+      const reaxct = `reason_${lab.slug}`;
+      ratingVal = getCell(row, fields, rexact, []);
+      reasonVal = getCell(row, fields, reaxct, []);
+      // Fallback to legacy dayN names if empty
+      if (!ratingVal) {
+        const dayIdx = labels.indexOf(lab); // 2..6
+        const legacyDay = dayIdx + 1; // 3..7
+        const rKey = NEED[`rating_day${legacyDay}`] || [`rating_day${legacyDay}`, `day${legacyDay} rating`, `d${legacyDay} rating`];
+        const sKey = NEED[`reason_day${legacyDay}`] || [`reason_day${legacyDay}`, `day${legacyDay} reason`, `d${legacyDay} why`];
+        ratingVal = getCell(row, fields, `rating_day${legacyDay}`, rKey);
+        reasonVal = getCell(row, fields, `reason_day${legacyDay}`, sKey);
+      }
+    }
+
+    // If openingday is a future date, mark days before it closed.
+    const openingRaw = NEED.openingday ? (row[NEED.openingday] || "").toString().trim() : "";
+    const openingUpper = openingRaw.toUpperCase();
+    const isOpenWord = openingUpper === "OPEN";
+    let closed = false;
+    if (!isOpenWord && openingRaw) {
+      const tryDate = new Date(openingRaw);
+      if (!isNaN(tryDate)) {
+        const labelDate = (lab.slug==="today") ? new Date()
+          : (lab.slug==="tomorrow") ? new Date(Date.now()+86400000)
+          : new Date(lab.slug+"T00:00:00");
+        if (labelDate < new Date(tryDate.toISOString().slice(0,10)+"T00:00:00")) closed = true;
+      }
+    } else if (!isOpenWord && !openingRaw) {
+      // Unknown opening => consider closed
+      closed = true;
+    }
+
+    const fillEl = document.getElementById(`stoke-${idx}`);
+    const txtEl  = document.getElementById(`rt-${idx}`);
+    const rsEl   = document.getElementById(`rs-${idx}`);
+
+    if (closed) {
+      setStokeBar(fillEl, txtEl, "closed");
+      rsEl.textContent = "resort closed";
+    } else {
+      setStokeBar(fillEl, txtEl, ratingVal || "");
+      rsEl.textContent = (reasonVal || "").toString();
+    }
+  });
 
   // Map
-  const lat = H.lat ? toNum(row[H.lat]) : NaN;
-  const lon = H.lon ? toNum(row[H.lon]) : NaN;
+  const lat = NEED.lat ? toNum(row[NEED.lat]) : NaN;
+  const lon = NEED.lon ? toNum(row[NEED.lon]) : NaN;
   if(!isNaN(lat) && !isNaN(lon) && Math.abs(lat)>0 && Math.abs(lon)>0){
     const map = L.map('map',{zoomControl:false}).setView([lat,lon], 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18, attribution:'&copy; OpenStreetMap'}).addTo(map);
-    L.marker([lat,lon]).addTo(map).bindPopup((H.skiresort && row[H.skiresort])||'Resort');
+    L.marker([lat,lon]).addTo(map).bindPopup((NEED.skiresort && row[NEED.skiresort])||'Resort');
     setTimeout(()=> map.invalidateSize(), 200);
   } else {
     document.getElementById('map').innerHTML = '<div style="padding:12px;color:#9fb1c6">No coordinates found in sheet.</div>';
   }
 }
+
 window.addEventListener('load', main);
 </script>
 </body>
