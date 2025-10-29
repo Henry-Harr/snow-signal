@@ -194,12 +194,24 @@ header{margin-bottom:8px}
 <script>
 const CSV_URL = `https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv`;
 const NEED = {
-  skiresort:"skiresort",
-  seasonsnow:"seasonsnow", last24hr:"last24hr", last72hr:"last72hr",
-  snow24h:"snow24h", tmrsnow:"tmrsnow","3snow":"3snow","4snow":"4snow","5snow":"5snow","6snow":"6snow","7snow":"7snow",
-  openingday:"openingday",
-  rating_td:"rating_td", rating_tmr:"rating_tmr", rating_day3:"rating_day3",
-  reason_td:"reason_td", reason_tmr:"reason_tmr", reason_day3:"reason_day3"
+  skiresort:["skiresort","resort","name"],
+  seasonsnow:["seasonsnow","season snow","season_total","season","season inches"],
+  last24hr:["last24hr","24h","last 24","snow24","snow_24","24hr"],
+  last72hr:["last72hr","72h","last 72","snow72","snow_72","72hr"],
+  snow24h:["snow24h","next24h","next 24","d0","today snow"],
+  tmrsnow:["tmrsnow","tomorrow","d1","day1"],
+  "3snow":["3snow","d2","day2"],
+  "4snow":["4snow","d3","day3"],
+  "5snow":["5snow","d4","day4"],
+  "6snow":["6snow","d5","day5"],
+  "7snow":["7snow","d6","day6"],
+  openingday:["openingday","status","open","operating"],
+  rating_td:["rating_td","today rating","today"],
+  rating_tmr:["rating_tmr","tomorrow rating","tmr rating"],
+  rating_day3:["rating_day3","day3 rating","d3 rating"],
+  reason_td:["reason_td","today reason","today why"],
+  reason_tmr:["reason_tmr","tmr reason","tomorrow why"],
+  reason_day3:["reason_day3","day3 reason","d3 why"]
 };
 const $ = id=>document.getElementById(id);
 const lower=s=> (s??"").toString().trim().toLowerCase();
@@ -275,14 +287,45 @@ async function main(){
 
   // Case-insensitive header map
   const fields = parsed.meta.fields || [];
-  const hmap = {}; fields.forEach(h=> hmap[lower(h)] = h);
-  const H={}; for(const [k,w] of Object.entries(NEED)) H[k] = hmap[lower(w)] || null;
+const lowers = fields.map(f=>({raw:f, low:lower(f)}));
+function findHeader(cands){
+  for(const c of (Array.isArray(cands)?cands:[cands])){
+    const lc = lower(c);
+    // exact first
+    const exact = lowers.find(o=> o.low === lc); if(exact) return exact.raw;
+  }
+  // loose contains
+  for(const c of (Array.isArray(cands)?cands:[cands])){
+    const lc = lower(c);
+    const cont = lowers.find(o=> o.low.includes(lc)); if(cont) return cont.raw;
+  }
+  return null;
+}
+const H = {};
+for(const [k,cands] of Object.entries(NEED)) H[k] = findHeader(cands);
 
   const rows = parsed.data || [];
-  const row = rows.find(r => H.skiresort && lower(r[H.skiresort]) === lower(resortQ)) || rows[0] || null;
-  if(!row){ alert("No data rows present in sheet."); return; }
+  let row = null;
+if(rows.length){
+  if(resortQ){
+    row = rows.find(r => H.skiresort && lower(r[H.skiresort]) === lower(resortQ));
+  }
+  if(!row) row = rows[0];
+}
+if(!row){
+  const err = document.createElement('div');
+  err.style.color = '#fca5a5'; err.style.marginTop = '10px';
+  err.textContent = 'No rows found in the sheet.';
+  document.body.appendChild(err); return;
+}
+if(resortQ && H.skiresort && lower(row[H.skiresort]) !== lower(resortQ)){
+  const warn = document.createElement('div');
+  warn.style.color = '#f59e0b'; warn.style.marginTop='8px';
+  warn.textContent = `Resort "${resortQ}" not found. Showing first row: ${row[H.skiresort] || 'Unknown'}`;
+  document.body.appendChild(warn);
+}
 
-  $("title").textContent = row[H.skiresort] || resortQ || "Ski Resort";
+  $("title").textContent = (H.skiresort && row[H.skiresort]) || resortQ || "Ski Resort";
   setBadge(H.openingday ? row[H.openingday] : "");
 
   // Left stats
