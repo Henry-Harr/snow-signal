@@ -13,106 +13,147 @@
 
 <style>
   :root{
-    --bg:#0b0f14;         /* deep night */
-    --panel:#111923;      /* card bg */
-    --border:#223041;
-    --text:#e3eef7;
-    --muted:#9fb1c6;
-    --accent:#7cc9ff;     /* ice blue */
-    --accent2:#6ee7b7;    /* mint */
-    --ok:#22c55e;
-    --warn:#f59e0b;
-    --danger:#ef4444;
+    /* Midnight glacier theme */
+    --bg:#0a1018;
+    --bg2:#0c1320;
+    --panel:#101a28;
+    --frost:rgba(255,255,255,.07);
+    --frost-brd:rgba(255,255,255,.12);
+    --ring:rgba(124,201,255,.25);
+    --text:#e7f2ff;
+    --muted:#a6bfd9;
+
+    --ice:#8ec9ff;
+    --mint:#59e3bd;
+    --glow:#6ea8ff;
+
+    --ok:#35d677;
+    --warn:#f6b84c;
+    --danger:#ef6464;
   }
 
   *{box-sizing:border-box}
   html,body{height:100%}
   body{
-    margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--text);
+    margin:0; color:var(--text);
+    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
     background:
-      radial-gradient(1200px 800px at 10% -20%, #162238 0%, transparent 60%),
+      radial-gradient(1200px 800px at 10% -20%, #13223b 0%, transparent 60%),
       radial-gradient(1000px 800px at 120% 20%, #0c1422 0%, transparent 55%),
-      linear-gradient(180deg, #0a1220 0%, #070b12 60%);
+      linear-gradient(180deg, var(--bg2) 0%, var(--bg) 60%);
     background-attachment: fixed;
   }
-  .noise{position:fixed;inset:-20%;pointer-events:none;opacity:.06;mix-blend-mode:overlay;
+  .noise{position:fixed;inset:-20%;pointer-events:none;opacity:.05;mix-blend-mode:overlay;
     background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>');
     animation:grain 7s steps(10) infinite;
   }
   @keyframes grain{0%{transform:translate(0,0)}50%{transform:translate(-1%,1%)}100%{transform:translate(0,0)}}
 
-  .wrap{max-width:1200px;margin:24px auto 64px;padding:0 18px}
+  .wrap{max-width:1200px;margin:26px auto 64px;padding:0 18px}
 
-  /* Header row: title left, badge right */
+  /* Header row */
   header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:8px 0 18px}
-  .title{font-size:64px; font-weight:900; line-height:1.05; letter-spacing:.2px; margin:0}
+  .title{font-size:64px; font-weight:900; line-height:1.05; letter-spacing:.2px; margin:0;
+    text-shadow:0 6px 28px rgba(110,168,255,.15);
+  }
   .badge{
     padding:10px 18px;border-radius:999px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;
-    background:linear-gradient(180deg, rgba(34,197,94,.2), rgba(34,197,94,.06));
-    border:1px solid rgba(34,197,94,.45); color:#d9ffea; box-shadow:0 0 0 0 rgba(34,197,94,.35);
-    animation:pulse 2.5s infinite;
+    background:linear-gradient(180deg, rgba(53,214,119,.22), rgba(53,214,119,.10));
+    border:1px solid rgba(53,214,119,.45); color:#d9ffea;
+    box-shadow:0 0 0 0 rgba(53,214,119,.30), 0 12px 26px rgba(0,0,0,.25);
+    backdrop-filter: blur(8px);
+    animation:pulse 3s infinite;
   }
-  .badge.closed{background:linear-gradient(180deg, rgba(239,68,68,.2), rgba(239,68,68,.06)); border-color:rgba(239,68,68,.45); color:#fee2e2; animation:none}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.35)} 70%{box-shadow:0 0 0 22px rgba(34,197,94,0)} 100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+  .badge.closed{
+    background:linear-gradient(180deg, rgba(239,100,100,.22), rgba(239,100,100,.10));
+    border-color:rgba(239,100,100,.45); color:#ffe9e9; animation:none
+  }
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(53,214,119,.30)} 70%{box-shadow:0 0 0 20px rgba(53,214,119,0)} 100%{box-shadow:0 0 0 0 rgba(53,214,119,0)}}
 
-  /* Top content row: left stats column, right map box */
-  .row{display:grid;grid-template-columns:1.2fr .8fr; gap:28px}
+  /* Grid row: left stats / right map */
+  .row{display:grid;grid-template-columns:1.15fr .85fr; gap:28px}
   @media (max-width:1000px){.row{grid-template-columns:1fr}}
 
   .panel{
-    background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
-    border:1px solid var(--border); border-radius:20px; padding:18px 18px 16px;
-    box-shadow:0 12px 36px rgba(0,0,0,.25); backdrop-filter: blur(8px);
+    background:linear-gradient(180deg, var(--frost), rgba(255,255,255,.035));
+    border:1px solid var(--frost-brd);
+    border-radius:20px; padding:18px 18px 16px;
+    box-shadow:
+      0 16px 40px rgba(0,0,0,.35),
+      inset 0 1px 0 rgba(255,255,255,.04);
+    backdrop-filter: blur(8px);
   }
-  h2{margin:8px 0 14px; font-size:22px; letter-spacing:.3px}
+  h2{margin:6px 0 12px; font-size:22px; letter-spacing:.3px}
   .subcap{color:var(--muted); font-size:14px; margin-top:-2px}
 
   /* Recent snow stats */
   .stats3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:6px}
   .stat{
-    background:linear-gradient(180deg, rgba(124,201,255,.08), rgba(124,201,255,.03));
-    border:1px solid rgba(124,201,255,.2); border-radius:14px; padding:14px 14px 12px;
+    background:linear-gradient(180deg, rgba(142,201,255,.10), rgba(142,201,255,.04));
+    border:1px solid rgba(142,201,255,.18);
+    border-radius:14px; padding:14px 14px 12px;
+    box-shadow:0 10px 28px rgba(18,30,50,.35), inset 0 1px 0 rgba(255,255,255,.05);
   }
-  .stat .k{font-size:13px; color:#b7c9de; text-transform:uppercase; letter-spacing:.9px}
+  .stat .k{font-size:12px; color:#bcd0e7; text-transform:uppercase; letter-spacing:.9px}
   .stat .v{margin-top:6px; font-size:28px; font-weight:900}
-  .seasonline{margin-top:14px; font-size:20px; font-weight:800}
 
-  /* Map box */
-  .mapbox{height:300px; border:1px solid var(--border); border-radius:16px; overflow:hidden; background:#0f1724}
+  /* Season hero */
+  .seasonhero{
+    margin-top:16px;
+    background:
+      radial-gradient(120px 60px at 15% 0%, rgba(142,201,255,.25), transparent 70%),
+      linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+    border:1px solid rgba(142,201,255,.22);
+    border-radius:18px;
+    padding:18px;
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    box-shadow: 0 16px 42px rgba(110,168,255,.18), inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  .seasonhero .label{font-size:16px; color:#cfe2fb; text-transform:uppercase; letter-spacing:.9px}
+  .seasonhero .value{font-size:48px; font-weight:900; letter-spacing:.5px; text-shadow:0 8px 28px rgba(110,168,255,.25)}
+  @media (max-width:520px){ .seasonhero .value{font-size:40px} }
 
-  /* Sections below: 7 Day Outlook + Stoke Rating */
-  .section{margin-top:34px}
-  .bigcap{font-size:42px; font-weight:900; margin:0 0 12px}
+  /* Map */
+  .mapbox{height:300px; border-radius:18px; overflow:hidden; background:#0f1724;
+    outline:1px solid rgba(142,201,255,.18);
+    box-shadow:0 12px 34px rgba(0,0,0,.35), 0 0 0 6px rgba(110,168,255,.06) inset;
+  }
+
+  /* Sections */
+  .section{margin-top:36px}
+  .bigcap{font-size:44px; font-weight:900; margin:0 0 12px; text-shadow:0 6px 26px rgba(110,168,255,.15)}
   .hint{color:var(--muted); font-size:13px; margin-bottom:10px}
 
-  /* Bars row (7 items) */
-  .bars{display:flex; gap:28px; flex-wrap:wrap}
-  .barwrap{display:flex; flex-direction:column; align-items:center; gap:6px; width:110px}
+  /* Bars */
+  .bars{display:flex; gap:28px; flex-wrap:wrap; align-items:flex-end; padding-bottom:10px}
+  .barwrap{display:flex; flex-direction:column; align-items:center; gap:8px; width:110px}
+  .barbox{height:220px; width:72px; display:flex; align-items:flex-end; justify-content:center}
   .bar{
     width:72px; border-radius:12px 12px 0 0;
-    background:linear-gradient(180deg, rgba(124,201,255,.55), rgba(124,201,255,.12));
-    border:1px solid rgba(124,201,255,.35);
-    box-shadow:0 10px 24px rgba(124,201,255,.22), inset 0 -10px 20px rgba(255,255,255,.06);
-    transition: transform .2s ease, box-shadow .2s ease;
+    background:linear-gradient(180deg, rgba(142,201,255,.55), rgba(142,201,255,.12));
+    outline:1px solid rgba(142,201,255,.28);
+    box-shadow:0 10px 24px rgba(110,168,255,.22), inset 0 -10px 18px rgba(255,255,255,.06);
+    transition: transform .2s ease, box-shadow .2s ease, outline-color .2s ease;
   }
-  .barwrap:hover .bar{ transform:translateY(-6px); box-shadow:0 12px 28px rgba(124,201,255,.3), inset 0 -12px 22px rgba(255,255,255,.08)}
+  .barwrap:hover .bar{ transform:translateY(-6px); box-shadow:0 14px 30px rgba(110,168,255,.32), inset 0 -12px 20px rgba(255,255,255,.08); outline-color: rgba(110,168,255,.45) }
+
   .bar-label{font-size:14px; font-weight:800}
   .bar-inch{font-size:14px; color:var(--muted)}
 
-  /* Stoke bars (rating) */
+  /* Stoke bars */
   .sbar{
-    width:72px; border-radius:12px 12px 0 0; border:1px solid rgba(255,255,255,.14);
-    background:linear-gradient(180deg, rgba(110,231,183,.55), rgba(110,231,183,.10));
-    box-shadow:0 10px 24px rgba(110,231,183,.20), inset 0 -10px 20px rgba(255,255,255,.06);
-    transition: transform .2s ease, box-shadow .2s ease;
+    width:72px; border-radius:12px 12px 0 0;
+    outline:1px solid rgba(255,255,255,.16);
+    box-shadow:0 10px 24px rgba(0,0,0,.26), inset 0 -10px 18px rgba(255,255,255,.06);
+    transition: transform .2s ease, box-shadow .2s ease, outline-color .2s ease;
   }
-  .barwrap:hover .sbar{ transform:translateY(-6px); box-shadow:0 12px 28px rgba(110,231,183,.28), inset 0 -12px 22px rgba(255,255,255,.08)}
+  .barwrap:hover .sbar{ transform:translateY(-6px); box-shadow:0 14px 30px rgba(0,0,0,.32), inset 0 -12px 20px rgba(255,255,255,.08); outline-color: rgba(255,255,255,.28) }
   .rating-text{font-size:15px; font-weight:900}
   .reason{font-size:13px; color:var(--muted); min-height:18px}
 
   /* Footer */
-  footer{margin:40px 0 8px; color:var(--muted); font-size:12px; text-align:center}
-  a{color:var(--accent)}
+  footer{margin:42px 0 10px; color:var(--muted); font-size:12px; text-align:center}
+  a{color:var(--ice)}
 </style>
 </head>
 <body>
@@ -125,7 +166,7 @@
   </header>
 
   <div class="row">
-    <!-- Left column: recent snow + season total -->
+    <!-- Left column: recent snow + season hero -->
     <section class="panel">
       <h2>Recent Snow</h2>
       <div class="stats3">
@@ -133,7 +174,11 @@
         <div class="stat"><div class="k">Last 72 Hours</div><div class="v" id="last72">x in</div></div>
         <div class="stat"><div class="k">Last 7 days</div><div class="v" id="last7">x in</div></div>
       </div>
-      <div class="seasonline" id="seasonLine">Season Total: x inches</div>
+
+      <div class="seasonhero">
+        <div class="label">Season Total</div>
+        <div class="value" id="seasonValue">0 in</div>
+      </div>
     </section>
 
     <!-- Right column: Map -->
@@ -161,7 +206,7 @@
     </div>
   </section>
 
-  <footer>Powered by Snow Signal</footer>
+  <footer>Powered by <strong>Pow Signal</strong></footer>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -181,8 +226,15 @@ const isoDate = i => new Date(Date.now()+i*86400000).toISOString().slice(0,10);
 /* Map rating words to height/color */
 function ratingMeta(r){
   const k = lower(r||"");
-  const pct = { "poor":18, "fair":42, "good":68, "excellent":88, "all time":100, "closed": 6 }[k] ?? 0;
-  const col = { "poor":"#ef4444", "fair":"#f59e0b", "good":"#84cc16", "excellent":"#22c55e", "all time":"#16a34a", "closed":"#94a3b8" }[k] ?? "#94a3b8";
+  const pct = { "poor":18, "fair":42, "good":68, "excellent":88, "all time":100, "closed": 8 }[k] ?? 0;
+  const col = {
+    "poor":"#ef6464",
+    "fair":"#f6b84c",
+    "good":"#84e05f",
+    "excellent":"#35d677",
+    "all time":"#1fc45f",
+    "closed":"#8fa3b8"
+  }[k] ?? "#9fb3c9";
   return {pct, col, word: (r || "—")};
 }
 
@@ -218,8 +270,6 @@ async function main(){
     lat: find(["lat","latitude"]),
     lon: find(["lon","lng","longitude"]),
     openingday: find(["openingday","open","status"]),
-
-    // snowfall forecast per day (today rolling, then calendar days)
     snow24h: find(["snow24h","next24h","today snow","d0"]),
     tmrsnow: find(["tmrsnow","tomorrow","d1"]),
     d3: find(["3snow","day2","d2"]),
@@ -229,30 +279,32 @@ async function main(){
     d7: find(["7snow","day6","d6"]),
   };
 
-  // pick row by ?resort= query if present
+  // choose row
   let row = rows[0];
   if(resortQ && H.skiresort){
     const found = rows.find(r => lower(r[H.skiresort]) === lower(resortQ));
     if(found) row = found;
   }
 
-  // Header title + badge
+  // Title + badge
   $("title").textContent = (H.skiresort && row[H.skiresort]) || "Ski Resort";
   const badge = $("badge");
   const rawOpen = (H.openingday && row[H.openingday]) ? String(row[H.openingday]).trim() : "";
-  const isOpen = rawOpen.toUpperCase()==="OPEN" || rawOpen==="";
+  const isOpen = rawOpen.toUpperCase()==="OPEN" || rawOpen===""; // show OPEN if blank
   badge.textContent = isOpen ? "Open" : rawOpen;
   badge.classList.toggle("closed", !isOpen);
 
-  // Recent snow & season
+  // Recent snow
   const v24 = H.last24hr ? toNum(row[H.last24hr]) : 0;
   const v72 = H.last72hr ? toNum(row[H.last72hr]) : 0;
   const v7d = H.last7days ? toNum(row[H.last7days]) : 0;
   $("last24").textContent = nice(v24) + " in";
   $("last72").textContent = nice(v72) + " in";
   $("last7").textContent  = nice(v7d)  + " in";
+
+  // Season hero (bigger)
   const season = H.seasonsnow ? toNum(row[H.seasonsnow]) : 0;
-  $("seasonLine").textContent = "Season Total: " + nice(season) + " inches";
+  $("seasonValue").textContent = nice(season) + " in";
 
   // Map
   const lat = H.lat ? toNum(row[H.lat]) : NaN;
@@ -262,11 +314,11 @@ async function main(){
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18, attribution:'© OpenStreetMap'}).addTo(map);
     L.marker([lat,lon]).addTo(map).bindPopup((H.skiresort && row[H.skiresort])||"Resort");
     setTimeout(()=> map.invalidateSize(), 150);
-  }else{
+  } else {
     $("map").innerHTML = '<div style="padding:12px;color:#9fb1c6">No coordinates found in sheet.</div>';
   }
 
-  /* ---- 7 Day Outlook bars ---- */
+  /* ---- 7 Day Outlook (baseline aligned) ---- */
   const snowSeq = [
     { key:H.snow24h, label:"Today" },
     { key:H.tmrsnow, label:"Tomorrow" },
@@ -276,26 +328,23 @@ async function main(){
     { key:H.d6, label:labelDate(5) },
     { key:H.d7, label:labelDate(6) },
   ].filter(x=> !!x.key);
-
   const snowVals = snowSeq.map(s => toNum(row[s.key]));
   const snowMax  = Math.max(6, ...snowVals);
   $("snowBars").innerHTML = snowSeq.map((s, i) => {
     const v = snowVals[i];
-    const h = Math.max(6, (v / snowMax) * 220); // up to 220px height
+    const h = Math.max(6, (v / snowMax) * 220);
     return `
       <div class="barwrap">
-        <div class="bar" style="height:${h}px"></div>
+        <div class="barbox">
+          <div class="bar" style="height:${h}px"></div>
+        </div>
         <div class="bar-label">${s.label}</div>
         <div class="bar-inch">${nice(v)} in</div>
       </div>
     `;
   }).join("");
 
-  /* ---- 7 Day Stoke Rating ----
-     We support:
-     - rating_today / rating_tomorrow / rating_YYYY-MM-DD
-     - legacy rating_td / rating_tmr / rating_day3..day7
-  */
+  /* ---- 7 Day Stoke Rating ---- */
   const ratingLabels = [
     { slug:"today",    display:"Today" },
     { slug:"tomorrow", display:"Tomorrow" },
@@ -306,64 +355,60 @@ async function main(){
     { slug:isoDate(6), display:labelDate(6) },
   ];
 
-  function getField(exactLower, cands){
+  function buildFinder2(fields){ const lows = fields.map(f=>({raw:f, low:lower(f)})); return c=>{const arr=Array.isArray(c)?c:[c]; for(const k of arr){const ex=lows.find(o=>o.low===lower(k)); if(ex) return ex.raw;} for(const k of arr){const ct=lows.find(o=>o.low.includes(lower(k))); if(ct) return ct.raw;} return null;}; }
+  const getField = (exactLower, cands) => {
     const exact = fields.find(h => lower(h) === exactLower);
     if (exact) return exact;
-    const find = buildFinder(fields);
-    return find(cands) || null;
-  }
-
-  function getCell(exactLower, fallbacks){
+    const f = buildFinder2(fields);
+    return f(cands) || null;
+  };
+  const getCell = (exactLower, fallbacks) => {
     const name = getField(exactLower, fallbacks);
     return name ? row[name] : "";
-  }
-
-  function legacyKeys(idx){ // idx: 0..6 -> td/tmr/day3..7
+  };
+  function legacyKeys(idx){
     if (idx===0) return { r:["rating_td","today rating"], s:["reason_td","today reason"] };
     if (idx===1) return { r:["rating_tmr","tomorrow rating"], s:["reason_tmr","tmr reason"] };
-    const d = idx+1; // 3..7
+    const d = idx+1;
     return { r:[`rating_day${d}`, `day${d} rating`, `d${d} rating`],
              s:[`reason_day${d}`, `day${d} reason`, `d${d} why`] };
   }
 
   const stokeHtml = ratingLabels.map((lab, idx) => {
-    // Prefer date-based fields first
     let rating = getCell(`rating_${lab.slug}`, []);
     let reason = getCell(`reason_${lab.slug}`, []);
-
-    if(!rating){ // fallback to legacy
+    if(!rating){
       const L = legacyKeys(idx);
       rating = getCell(`rating_${idx===0?'today':idx===1?'tomorrow':`day${idx+1}`}`, L.r);
       reason = getCell(`reason_${idx===0?'today':idx===1?'tomorrow':`day${idx+1}`}`, L.s);
     }
 
-    // Opening logic → closed before opening day
+    // “closed until opening day” logic
     let closed = false;
-    const opRaw = rawOpen;
-    if(opRaw && opRaw.toUpperCase()!=="OPEN"){
-      const opDate = new Date(opRaw);
+    const rawOpenVal = (H.openingday && row[H.openingday]) ? String(row[H.openingday]).trim() : "";
+    if(rawOpenVal && rawOpenVal.toUpperCase()!=="OPEN"){
+      const opDate = new Date(rawOpenVal);
       if(!isNaN(opDate)){
         const thisDate = (idx===0) ? new Date() : (idx===1) ? new Date(Date.now()+86400000) : new Date(lab.slug+"T00:00:00");
         const opMid = new Date(opDate.toISOString().slice(0,10)+"T00:00:00");
         if(thisDate < opMid) closed = true;
       }
-    } else if(!opRaw){ // unknown -> assume closed
-      closed = true;
-    }
+    } else if(!rawOpenVal){ closed = true; }
 
     const meta = ratingMeta(closed ? "closed" : rating);
-    const h = Math.max(6, (meta.pct/100) * 220);
+    const h = Math.max(8, (meta.pct/100) * 220);
     const col = meta.col;
     return `
       <div class="barwrap">
-        <div class="sbar" style="height:${h}px; background:linear-gradient(180deg, ${col}88, ${col}22); border-color:${col}55;"></div>
+        <div class="barbox">
+          <div class="sbar" style="height:${h}px; background:linear-gradient(180deg, ${col}c0, ${col}22)"></div>
+        </div>
         <div class="bar-label">${lab.display}</div>
         <div class="rating-text">${(meta.word||'').toString().split(' ').map(w=> w? (w[0].toUpperCase()+w.slice(1)) : '').join(' ')}</div>
         <div class="reason">${(reason||"").toString()}</div>
       </div>
     `;
   }).join("");
-
   $("stokeBars").innerHTML = stokeHtml;
 }
 
