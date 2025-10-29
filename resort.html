@@ -1,110 +1,14 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Snow Signal — Resort</title>
-<style>
-  :root{
-    --text:#111; --muted:#444; --bar:#000; --bar2:#555;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;background:#fff;color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-  .wrap{max-width:1200px;margin:50px auto;padding:0 24px}
-  header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
-  h1{margin:0;font-size:64px;font-weight:700}
-  .badge{padding:6px 12px;border-radius:999px;font-size:14px;font-weight:700;color:#fff}
-  .badge.open{background:#15803d}    /* green */
-  .badge.closed{background:#b91c1c}  /* red */
-  .muted{color:var(--muted);font-size:14px}
-
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-top:24px}
-  h2{font-size:40px;margin:24px 0 12px}
-
-  /* Snow info + 7-day bars */
-  .snow-info{margin-top:8px;font-size:22px;line-height:1.8}
-  .bars{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-top:20px}
-  .barwrap{display:flex;flex-direction:column;align-items:center}
-  .bar{width:64px;background:var(--bar);border-radius:4px 4px 0 0;transition:transform .15s, background .15s}
-  .bar:hover{transform:translateY(-4px);background:var(--bar2)}
-  .bar-lbl{font-size:16px;margin-top:6px}
-  .bar-inch{font-weight:700;font-size:18px}
-
-  /* Rating bars (same color for same rating) */
-  .ratings{display:flex;gap:28px;justify-content:space-between;margin-top:10px}
-  .rate{flex:1;display:flex;flex-direction:column;align-items:center;gap:10px;min-width:140px}
-  .rbar-shell{
-    width:100%; max-width:260px; height:200px; border:1px solid #e5e5e5; border-radius:6px;
-    position:relative; background:#fafafa; overflow:hidden;
-  }
-  .rbar{position:absolute;left:0;right:0;bottom:0;height:0;border-radius:4px 4px 0 0;transition:height .3s, background .2s}
-  .rtext{font-size:22px;font-weight:700}
-  .reason{font-size:18px;color:var(--muted);text-align:center;min-height:22px}
-  .cap{font-size:14px;color:var(--muted)}
-
-  @media (max-width:900px){ .grid{grid-template-columns:1fr} h1{font-size:48px} }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <h1 id="title">Ski Resort</h1>
-    <div style="display:flex;gap:12px;align-items:center">
-      <span class="badge" id="openBadge">—</span>
-      <span class="muted" id="updated"></span>
-    </div>
-  </header>
-
-  <div class="grid">
-    <!-- LEFT: Snow -->
-    <section>
-      <div class="snow-info">
-        Season Snowfall: <span id="season">—</span> inches<br>
-        Last 24 hours: <span id="last24">—</span> inches<br>
-        Last 72 hours: <span id="last72">—</span> inches
-      </div>
-
-      <h2>7 Day snowfall:</h2>
-      <div class="bars" id="bars"></div>
-    </section>
-
-    <!-- RIGHT: Ratings -->
-    <section>
-      <h2>Stoke Rating:</h2>
-      <div class="ratings">
-        <div class="rate">
-          <div class="rbar-shell"><div class="rbar" id="rbar-td"></div></div>
-          <div class="cap">Today</div>
-          <div class="rtext" id="rt-td">—</div>
-          <div class="reason" id="rs-td"></div>
-        </div>
-        <div class="rate">
-          <div class="rbar-shell"><div class="rbar" id="rbar-tmr"></div></div>
-          <div class="cap">Tomorrow</div>
-          <div class="rtext" id="rt-tmr">—</div>
-          <div class="reason" id="rs-tmr"></div>
-        </div>
-        <div class="rate">
-          <div class="rbar-shell"><div class="rbar" id="rbar-d3"></div></div>
-          <div class="cap">Day 3</div>
-          <div class="rtext" id="rt-d3">—</div>
-          <div class="reason" id="rs-d3"></div>
-        </div>
-      </div>
-    </section>
-  </div>
-</div>
-
-<!-- Papa Parse -->
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
-/* Published CSV */
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv";
+/* ==== LIVE CSV (no publish needed) ==== */
+const SHEET_ID   = "1yfgTn0nAwJolJzyZN9kF7NLWjItQRe8Kl3OQYQhX2iM";   // your sheet id
+const SHEET_NAME = "Sheet1";                                         // exact tab name
+const CSV_URL = `https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv`;
 
-/* Columns */
-const COL = {
+/* Expected logical columns (we'll resolve headers case-insensitively) */
+const NEED = {
   skiresort:"skiresort",
-  seasonsnow:"seasonsnow", last24hr:"last24hr", last72hr:"last72hr", last7days:"last7days",
+  seasonsnow:"seasonsnow", last24hr:"last24hr", last72hr:"last72hr",
   snow24h:"snow24h", tmrsnow:"tmrsnow","3snow":"3snow","4snow":"4snow","5snow":"5snow","6snow":"6snow","7snow":"7snow",
   openingday:"openingday",
   rating_td:"rating_td", rating_tmr:"rating_tmr", rating_day3:"rating_day3",
@@ -113,30 +17,25 @@ const COL = {
 
 const $ = id => document.getElementById(id);
 const lower = s => (s??"").toString().trim().toLowerCase();
-const toNum = v => { const m = String(v ?? "").replace(",", "").match(/-?\\d+(\\.\\d+)?/); return m ? Number(m[0]) : 0; };
+const toNum = v => { const m = String(v ?? "").replace(",", "").match(/-?\d+(\.\d+)?/); return m ? Number(m[0]) : 0; };
 const nice = n => (isFinite(n) ? n.toFixed(1) : "0.0");
 const dPlus = i => new Date(Date.now() + i*86400000).toLocaleDateString(undefined,{month:"short",day:"numeric"});
 
-/* Rating -> % height AND color (same input → same output) */
 function ratingStyle(r){
   const key = lower(r);
-  const mapPct = {"poor":18,"fair":40,"good":68,"excellent":88,"all time":100};
-  const mapCol = {
-    "poor":"#ef4444",
-    "fair":"#f59e0b",
-    "good":"#84cc16",
-    "excellent":"#22c55e",
-    "all time":"#16a34a"
-  };
-  return {h: (mapPct[key] ?? 0), color: mapCol[key] ?? "#9ca3af"};
+  const pct = {"poor":18,"fair":40,"good":68,"excellent":88,"all time":100}[key] ?? 0;
+  const col = {
+    "poor":"#ef4444","fair":"#f59e0b","good":"#84cc16","excellent":"#22c55e","all time":"#16a34a"
+  }[key] ?? "#9ca3af";
+  return {h: Math.max(6,pct), color: col};
 }
 
 function setRating(barId, textId, reasonId, rating, reason){
   const {h, color} = ratingStyle(rating);
   const bar = $(barId);
-  bar.style.height = Math.max(6, h) + "%";
+  bar.style.height = h + "%";
   bar.style.background = color;
-  $(textId).textContent = rating ? rating.replace(/\\b\\w/g, c=>c.toUpperCase()) : "—";
+  $(textId).textContent = rating ? rating.replace(/\b\w/g,c=>c.toUpperCase()) : "—";
   $(reasonId).textContent = reason || "";
 }
 
@@ -147,41 +46,55 @@ async function main(){
   if(!resortQ){ alert("Add ?resort=Name to the URL."); return; }
 
   const r = await fetch(CSV_URL, {cache:"no-store"});
-  const text = await r.text();
-  const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+  const csv = await r.text();
+  const parsed = Papa.parse(csv, {header:true, skipEmptyLines:true});
+
+  // Build a case-insensitive header map
+  const fields = parsed.meta.fields || [];
+  const hmap = {}; fields.forEach(h => { hmap[lower(h)] = h; });
+
+  // Resolve each needed header to the actual header in the file
+  const H = {};
+  for (const [k, wanted] of Object.entries(NEED)) {
+    const actual = hmap[lower(wanted)];
+    H[k] = actual || null;
+  }
+
   const rows = parsed.data || [];
-  const row = rows.find(x => lower(x[COL.skiresort]) === lower(resortQ));
-  if(!row){ alert("Resort not found in sheet."); return; }
+  // Match resort row (trim + case-insensitive)
+  const row = rows.find(x => H.skiresort && lower(x[H.skiresort]) === lower(resortQ));
+  if(!row){ alert(`Resort "${resortQ}" not found in ${SHEET_NAME}.`); return; }
 
-  $("title").textContent = row[COL.skiresort] || resortQ;
+  $("title").textContent = row[H.skiresort] || resortQ;
 
-  /* OPEN/CLOSED badge */
-  const status = (row[COL.openingday]||"").toString().trim().toUpperCase();
+  // OPEN/CLOSED badge
+  const status = (H.openingday && row[H.openingday] || "").toString().trim().toUpperCase();
   const open = status === "OPEN";
-  const badge = $("openBadge");
+  const badge = document.getElementById("openBadge");
   badge.textContent = open ? "OPEN" : (status || "STATUS N/A");
   badge.className = "badge " + (open ? "open" : "closed");
 
-  /* Left info */
-  $("season").textContent = nice(toNum(row[COL.seasonsnow]));
-  $("last24").textContent = nice(toNum(row[COL.last24hr]));
-  $("last72").textContent = nice(toNum(row[COL.last72hr]));
+  // Left info
+  $("season").textContent = H.seasonsnow ? nice(toNum(row[H.seasonsnow])) : "—";
+  $("last24").textContent = H.last24hr   ? nice(toNum(row[H.last24hr]))   : "—";
+  $("last72").textContent = H.last72hr   ? nice(toNum(row[H.last72hr]))   : "—";
 
-  /* 7 buckets: Next 24h + D+1..D+6 (dates on the latter six) */
+  // 7 buckets: Next 24h + D+1..D+6
   const seq = [
-    {key: COL.snow24h, label: "Next 24h"},
-    {key: COL.tmrsnow, label: dPlus(1)},
-    {key: COL["3snow"], label: dPlus(2)},
-    {key: COL["4snow"], label: dPlus(3)},
-    {key: COL["5snow"], label: dPlus(4)},
-    {key: COL["6snow"], label: dPlus(5)},
-    {key: COL["7snow"], label: dPlus(6)},
-  ];
+    {key: H.snow24h, label: "Next 24h"},
+    {key: H.tmrsnow, label: dPlus(1)},
+    {key: H["3snow"], label: dPlus(2)},
+    {key: H["4snow"], label: dPlus(3)},
+    {key: H["5snow"], label: dPlus(4)},
+    {key: H["6snow"], label: dPlus(5)},
+    {key: H["7snow"], label: dPlus(6)},
+  ].filter(s => !!s.key);
+
   const vals = seq.map(s => toNum(row[s.key]));
   const max = Math.max(6, ...vals);
-  $("bars").innerHTML = seq.map((s,i)=>{
+  document.getElementById("bars").innerHTML = seq.map((s,i)=>{
     const v = vals[i];
-    const h = (v / max) * 160; // px
+    const h = (v / max) * 160;
     return `
       <div class="barwrap">
         <div class="bar" style="height:${h}px"></div>
@@ -190,13 +103,11 @@ async function main(){
       </div>`;
   }).join("");
 
-  /* Ratings -> bars (same rating => same color) */
-  setRating("rbar-td",  "rt-td",  "rs-td",  (row[COL.rating_td]||""),  (row[COL.reason_td]||""));
-  setRating("rbar-tmr", "rt-tmr", "rs-tmr", (row[COL.rating_tmr]||""), (row[COL.reason_tmr]||""));
-  setRating("rbar-d3",  "rt-d3",  "rs-d3",  (row[COL.rating_day3]||""), (row[COL.reason_day3]||""));
+  // Ratings (same rating => same color)
+  setRating("rbar-td",  "rt-td",  "rs-td",  (H.rating_td  ? row[H.rating_td]  : ""), (H.reason_td  ? row[H.reason_td]  : ""));
+  setRating("rbar-tmr", "rt-tmr", "rs-tmr", (H.rating_tmr ? row[H.rating_tmr] : ""), (H.reason_tmr ? row[H.reason_tmr] : ""));
+  setRating("rbar-d3",  "rt-d3",  "rs-d3",  (H.rating_day3? row[H.rating_day3]: ""), (H.reason_day3? row[H.reason_day3]: ""));
 }
 
 window.addEventListener("load", main);
 </script>
-</body>
-</html>
