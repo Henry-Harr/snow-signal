@@ -102,6 +102,11 @@
 header{margin-bottom:8px}
 .grid{gap:16px}
 .bars{gap:10px;flex-wrap:wrap;overflow:hidden}
+.mapbox{height:280px;border:1px solid var(--glass-brd);border-radius:14px;overflow:hidden;margin-bottom:12px}
+.stoke-row{display:flex;align-items:center;gap:10px}
+.stoke-label{width:88px;font-size:12px;color:#b7c9de;text-transform:uppercase;letter-spacing:.8px}
+.stoke-shell{flex:1;height:14px;border:1px solid var(--glass-brd);background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}
+.stoke-fill{height:100%;width:0%;background:linear-gradient(90deg, var(--accent), var(--accent2));box-shadow:0 6px 18px rgba(124,201,255,.25);transition:width .6s ease}
 </style>
 </head>
 <body>
@@ -131,54 +136,32 @@ header{margin-bottom:8px}
       <div class="bars" id="bars"></div>
     </section>
 
-    <!-- RIGHT: Ratings -->
+    <!-- RIGHT: Map + Stoke -->
     <section class="panel">
-      <h2>Stoke Rating</h2>
+      <h2>Map & Stoke</h2>
+      <div id="map" class="mapbox"></div>
       <div class="ratings">
         <div class="rate">
-          <div class="cap">Today</div>
-          <div class="hbar-shell"><div class="hbar" id="g-td"></div></div>
-          <div class="pcent" id="gtext-td">—</div>
+          <div class="stoke-row">
+            <div class="stoke-label">Today</div>
+            <div class="stoke-shell"><div class="stoke-fill" id="stoke-td"></div></div>
+          </div>
           <div class="rtext" id="rt-td">—</div>
           <div class="reason" id="rs-td"></div>
         </div>
         <div class="rate">
-          <div class="cap">Tomorrow</div>
-          <div class="hbar-shell"><div class="hbar" id="g-tmr"></div></div>
-          <div class="pcent" id="gtext-tmr">—</div>
+          <div class="stoke-row">
+            <div class="stoke-label">Tomorrow</div>
+            <div class="stoke-shell"><div class="stoke-fill" id="stoke-tmr"></div></div>
+          </div>
           <div class="rtext" id="rt-tmr">—</div>
           <div class="reason" id="rs-tmr"></div>
         </div>
         <div class="rate">
-          <div class="cap">Day 3</div>
-          <div class="hbar-shell"><div class="hbar" id="g-d3"></div></div>
-          <div class="pcent" id="gtext-d3">—</div>
-          <div class="rtext" id="rt-d3">—</div>
-          <div class="reason" id="rs-d3"></div>
-        </div>
-      </div>
+          <div class="stoke-row">
+            <div class="stoke-label">Day 3</div>
+            <div class="stoke-shell"><div class="stoke-fill" id="stoke-d3"></div></div>
           </div>
-          <div class="cap">Today</div>
-          <div class="rtext" id="rt-td">—</div>
-          <div class="reason" id="rs-td"></div>
-        </div>
-
-        <div class="rate">
-          <div class="g-wrap">
-            <svg class="gauge" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" stroke="rgba(255,255,255,.08)" stroke-width="12" fill="none"/><circle id="g-tmr" cx="60" cy="60" r="52" stroke-dasharray="326" stroke-dashoffset="326" stroke-linecap="round" stroke-width="12" fill="none"/></svg>
-            <div class="g-label" id="gtext-tmr">—</div>
-          </div>
-          <div class="cap">Tomorrow</div>
-          <div class="rtext" id="rt-tmr">—</div>
-          <div class="reason" id="rs-tmr"></div>
-        </div>
-
-        <div class="rate">
-          <div class="g-wrap">
-            <svg class="gauge" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" stroke="rgba(255,255,255,.08)" stroke-width="12" fill="none"/><circle id="g-d3" cx="60" cy="60" r="52" stroke-dasharray="326" stroke-dashoffset="326" stroke-linecap="round" stroke-width="12" fill="none"/></svg>
-            <div class="g-label" id="gtext-d3">—</div>
-          </div>
-          <div class="cap">Day 3</div>
           <div class="rtext" id="rt-d3">—</div>
           <div class="reason" id="rs-d3"></div>
         </div>
@@ -189,10 +172,12 @@ header{margin-bottom:8px}
   
 </div>
 
-<!-- Papa Parse -->
+<!-- Leaflet (map) + PapaParse -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
-const CSV_URL = `https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv`;
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv";
 const NEED = {
   skiresort:["skiresort","resort","name"],
   seasonsnow:["seasonsnow","season snow","season_total","season","season inches"],
@@ -205,6 +190,8 @@ const NEED = {
   "5snow":["5snow","d4","day4"],
   "6snow":["6snow","d5","day5"],
   "7snow":["7snow","d6","day6"],
+  lat:["lat","latitude"],
+  lon:["lon","lng","longitude"],
   openingday:["openingday","status","open","operating"],
   rating_td:["rating_td","today rating","today"],
   rating_tmr:["rating_tmr","tomorrow rating","tmr rating"],
@@ -214,18 +201,18 @@ const NEED = {
   reason_day3:["reason_day3","day3 reason","d3 why"]
 };
 const $ = id=>document.getElementById(id);
-const lower=s=> (s??"").toString().trim().toLowerCase();
-const toNum=v=>{const m=String(v??"").replace(","," ").match(/-?\d+(\.\d+)?/);return m?Number(m[0]):0};
-const nice=n=> isFinite(n)? (Math.abs(n) >= 100 ? n.toFixed(0) : n.toFixed(1)) : "0";
-const dPlus=i=> new Date(Date.now()+i*86400000).toLocaleDateString(undefined,{month:"short",day:"numeric"});
+const lower = s => (s==null?"":String(s)).trim().toLowerCase();
+const toNum = v => { const s = String(v==null?"":v).replace(/,/g,""), cleaned = s.replace(/[^0-9.+-]/g,""); const n = parseFloat(cleaned); return isNaN(n)?0:n; };
+const nice  = n => (isFinite(n) ? (Math.abs(n) >= 100 ? n.toFixed(0) : n.toFixed(1)) : "0");
+const dPlus = i => new Date(Date.now()+i*86400000).toLocaleDateString(undefined,{month:"short",day:"numeric"});
 
-/* Map ratings to % + color */
 function ratingStyle(r){
-  const key = lower(r);
-  const pct = {"poor":18,"fair":42,"good":68,"excellent":88,"all time":100}[key] ?? 0;
-  const col = {"poor":"#ef4444","fair":"#f59e0b","good":"#84cc16","excellent":"#22c55e","all time":"#16a34a"}[key] ?? "#94a3b8";
-  return {pct, col};
+  const key = lower(r||'');
+  const pct = {poor:18,fair:42,good:68,excellent:88,"all time":100}[key] ?? 0;
+  const col = {poor:'#ef4444',fair:'#f59e0b',good:'#84cc16',excellent:'#22c55e','all time':'#16a34a'}[key] ?? '#94a3b8';
+  return {pct,col,word: r||'—'};
 }
+function titleCase(s){ return String(s||'').split(' ').map(w=> w? (w[0].toUpperCase()+w.slice(1)) : '').join(' '); }
 function setBadge(status){
   const badge = $("openBadge");
   const up = $("updated");
@@ -235,111 +222,42 @@ function setBadge(status){
   badge.className = "badge "+(open?"open":"closed");
   up.textContent = "Powered by Pow Signal";
 }
-
-/* Draw circular gauge (326 ≈ circumference for r=52) */
-function drawBar(id, pct, col){
-  const el = document.getElementById(id); if(!el) return;
-  el.style.background = `linear-gradient(90deg, ${col}, var(--accent2))`;
-  el.style.width = '0%';
-  requestAnimationFrame(()=>{ el.style.width = Math.max(0, Math.min(100, pct)) + '%'; });
-}55)`;
-  c.style.transition = "stroke-dashoffset .8s ease";
-  c.setAttribute("stroke-dasharray", circumference.toFixed(2));
-  c.setAttribute("stroke-dashoffset", circumference.toFixed(2));
-  requestAnimationFrame(()=>{ c.setAttribute("stroke-dashoffset", offset.toFixed(2)); });
-}
-
-function setRating(prefix, rating, reason){
-  const rs = (rating||'').toString();
-  const key = rs.trim().toLowerCase();
-  const pctMap = {poor:18,fair:42,good:68,excellent:88,"all time":100};
-  const colMap = {poor:'#ef4444',fair:'#f59e0b',good:'#84cc16',excellent:'#22c55e','all time':'#16a34a'};
-  const pct = pctMap[key] ?? 0;
-  const col = colMap[key] ?? '#94a3b8';
-  drawBar('g-'+prefix, pct, col);
-  document.getElementById('gtext-'+prefix).textContent = Math.round(pct)+'%';
-  document.getElementById('rt-'+prefix).textContent = rs || '—';
-  document.getElementById('rs-'+prefix).textContent = reason || '';
-} = ratingStyle(rating);
-  drawGauge("g-"+prefix, pct, col);
-  $("gtext-"+prefix).textContent = Math.round(pct)+"%";
-  $("rt-"+prefix).textContent = rating ? rating.replace(/\b\w/g,c=>c.toUpperCase()) : "—";
-  $("rs-"+prefix).textContent = reason || "";
-}
-
-function chip(txt){
-  const el = document.createElement('span');
-  el.className = 'chip';
-  el.textContent = txt;
-  return el;
+function setStoke(idFill, idText, rating){
+  const {pct,col,word} = ratingStyle(rating);
+  const el = document.getElementById(idFill);
+  if(el){ el.style.background = `linear-gradient(90deg, ${col}, var(--accent2))`; el.style.width = '0%'; requestAnimationFrame(()=>{ el.style.width = Math.max(0,Math.min(100,pct))+"%"; }); }
+  if(idText) document.getElementById(idText).textContent = titleCase(word);
 }
 
 async function main(){
   const resortQ = new URLSearchParams(location.search).get("resort") || "";
-  $("subtitle").textContent = resortQ? `7‑day outlook for ${resortQ}` : "7‑day outlook • live stoke";
-  if(!resortQ){
-    $("updated").textContent = "Add ?resort=Name to the URL";
-  }
-
   const resp = await fetch(CSV_URL, {cache:"no-store"});
   const csv  = await resp.text();
   const parsed = Papa.parse(csv,{header:true,skipEmptyLines:true});
-
-  // Case-insensitive header map
   const fields = parsed.meta.fields || [];
-const lowers = fields.map(f=>({raw:f, low:lower(f)}));
-function findHeader(cands){
-  for(const c of (Array.isArray(cands)?cands:[cands])){
-    const lc = lower(c);
-    // exact first
-    const exact = lowers.find(o=> o.low === lc); if(exact) return exact.raw;
-  }
-  // loose contains
-  for(const c of (Array.isArray(cands)?cands:[cands])){
-    const lc = lower(c);
-    const cont = lowers.find(o=> o.low.includes(lc)); if(cont) return cont.raw;
-  }
-  return null;
-}
-const H = {};
-for(const [k,cands] of Object.entries(NEED)) H[k] = findHeader(cands);
-
+  const lowers = fields.map(f=>({raw:f, low:lower(f)}));
+  const findHeader = (cands)=>{
+    const arr = Array.isArray(cands)?cands:[cands];
+    for(const c of arr){ const ex = lowers.find(o=> o.low === lower(c)); if(ex) return ex.raw; }
+    for(const c of arr){ const ct = lowers.find(o=> o.low.includes(lower(c))); if(ct) return ct.raw; }
+    return null;
+  };
+  const H = {}; for(const [k,c] of Object.entries(NEED)) H[k] = findHeader(c);
   const rows = parsed.data || [];
   let row = null;
-if(rows.length){
-  if(resortQ){
-    row = rows.find(r => H.skiresort && lower(r[H.skiresort]) === lower(resortQ));
-  }
+  if(resortQ && H.skiresort) row = rows.find(r => lower(r[H.skiresort]) === lower(resortQ));
   if(!row) row = rows[0];
-}
-if(!row){
-  const err = document.createElement('div');
-  err.style.color = '#fca5a5'; err.style.marginTop = '10px';
-  err.textContent = 'No rows found in the sheet.';
-  document.body.appendChild(err); return;
-}
-if(resortQ && H.skiresort && lower(row[H.skiresort]) !== lower(resortQ)){
-  const warn = document.createElement('div');
-  warn.style.color = '#f59e0b'; warn.style.marginTop='8px';
-  warn.textContent = `Resort "${resortQ}" not found. Showing first row: ${row[H.skiresort] || 'Unknown'}`;
-  document.body.appendChild(warn);
-}
+  if(!row){ alert('No data rows found.'); return; }
 
   $("title").textContent = (H.skiresort && row[H.skiresort]) || resortQ || "Ski Resort";
   setBadge(H.openingday ? row[H.openingday] : "");
 
   // Left stats
-  const season = H.seasonsnow ? toNum(row[H.seasonsnow]) : 0;
-  const l24    = H.last24hr   ? toNum(row[H.last24hr])    : 0;
-  const l72    = H.last72hr   ? toNum(row[H.last72hr])    : 0;
-  $("season").textContent = nice(season)+" in";
-  $("last24").textContent = nice(l24)+" in";
-  $("last72").textContent = nice(l72)+" in";
+  $("season").textContent = H.seasonsnow && row[H.seasonsnow] != null ? nice(toNum(row[H.seasonsnow]))+" in" : "—";
+  $("last24").textContent = H.last24hr   && row[H.last24hr]   != null ? nice(toNum(row[H.last24hr]))+" in"   : "—";
+  $("last72").textContent = H.last72hr   && row[H.last72hr]   != null ? nice(toNum(row[H.last72hr]))+" in"   : "—";
 
-  // Chips summary
-  
-
-  // 7‑day bars (Next 24h + D1..D6)
+  // Bars 7-day
   const seq = [
     {key:H.snow24h, label:"Next 24h"},
     {key:H.tmrsnow, label:dPlus(1)},
@@ -352,20 +270,30 @@ if(resortQ && H.skiresort && lower(row[H.skiresort]) !== lower(resortQ)){
   const vals = seq.map(s=> toNum(row[s.key]));
   const max  = Math.max(6, ...vals);
   $("bars").innerHTML = seq.map((s,i)=>{
-    const v = vals[i], h = (v/max)*220; // taller bars
-    const tip = `${s.label} — ${nice(v)} in`;
+    const v = vals[i], h = (v/max)*220;
     return `<div class="barwrap">
       <div class="bar" style="height:${h}px"></div>
-      <div class="tip">${tip}</div>
       <div class="bar-lbl">${s.label}</div>
       <div class="bar-inch">${nice(v)} in</div>
     </div>`;
   }).join('');
 
-  // Ratings
-  setRating('td',  (H.rating_td  ? row[H.rating_td]  : ''), (H.reason_td  ? row[H.reason_td]  : ''));
-  setRating('tmr', (H.rating_tmr ? row[H.rating_tmr] : ''), (H.reason_tmr ? row[H.reason_tmr] : ''));
-  setRating('d3',  (H.rating_day3? row[H.rating_day3]: ''), (H.reason_day3? row[H.reason_day3]: ''));
+  // Stoke bars
+  setStoke('stoke-td','rt-td',   H.rating_td   ? row[H.rating_td]   : '');
+  setStoke('stoke-tmr','rt-tmr', H.rating_tmr  ? row[H.rating_tmr]  : '');
+  setStoke('stoke-d3','rt-d3',   H.rating_day3 ? row[H.rating_day3] : '');
+
+  // Map
+  const lat = H.lat ? toNum(row[H.lat]) : NaN;
+  const lon = H.lon ? toNum(row[H.lon]) : NaN;
+  if(!isNaN(lat) && !isNaN(lon) && Math.abs(lat)>0 && Math.abs(lon)>0){
+    const map = L.map('map',{zoomControl:false}).setView([lat,lon], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18, attribution:'&copy; OpenStreetMap'}).addTo(map);
+    L.marker([lat,lon]).addTo(map).bindPopup((H.skiresort && row[H.skiresort])||'Resort');
+    setTimeout(()=> map.invalidateSize(), 200);
+  } else {
+    document.getElementById('map').innerHTML = '<div style="padding:12px;color:#9fb1c6">No coordinates found in sheet.</div>';
+  }
 }
 window.addEventListener('load', main);
 </script>
