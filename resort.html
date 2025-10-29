@@ -5,141 +5,210 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Snow Signal — Resort</title>
 <style>
-  :root{--bg:#0b0f14;--panel:#111923;--text:#e3eef7;--muted:#9fb1c6;--chip:#182333;--border:#203043;--track:#223144}
-  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-  .wrap{max-width:900px;margin:32px auto;padding:0 16px}
-  a{color:#8cc0ff;text-decoration:none}
-  header{display:flex;gap:12px;align-items:baseline;justify-content:space-between;margin-bottom:10px}
-  h1{margin:0;font-size:22px}
-  .muted{color:var(--muted);font-size:13px}
-  .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px}
-  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-  .chip{background:var(--chip);border:1px solid var(--border);border-radius:999px;padding:6px 10px;font-size:12px;color:#cfe0f2}
-  .row{display:grid;grid-template-columns:120px 1fr;align-items:center;gap:12px;margin:12px 0}
-  .label{font-weight:700;font-size:13px;color:#d6e1ee;text-transform:uppercase;letter-spacing:.04em}
-  .track{background:var(--track);height:16px;border-radius:999px;position:relative;overflow:hidden;border:1px solid var(--border)}
-  .fill{height:100%;width:0%;transition:width .55s ease}
-  .tag{position:absolute;right:8px;top:-18px;font-size:11px;color:var(--muted)}
-  .back{margin-bottom:12px;display:inline-block}
-  .err{color:#ffb4b4;margin-top:8px}
+  :root{
+    --bg:#ffffff; --text:#111; --muted:#333; --line:#111; --bar:#111;
+    --green1:#7aa137; --green2:#9edd3a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:1200px;margin:36px auto;padding:0 24px}
+  a{color:#3366ee;text-decoration:none}
+  header{display:flex;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:12px}
+  h1{margin:0;font-size:64px;font-weight:700;letter-spacing:.5px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:12px}
+  .section-title{font-size:40px;font-weight:600;margin:24px 0 12px}
+  /* Snowfall small bars (horizontal) */
+  .snow-row{display:flex;align-items:center;gap:12px;margin:20px 0}
+  .snow-bar{flex:0 0 160px;height:16px;background:var(--bar);border-radius:3px}
+  .snow-meta{display:flex;flex-direction:column;gap:6px}
+  .label-date{font-size:18px}
+  .label-amount{font-size:22px;font-weight:600}
+  /* Stoke vertical bars */
+  .stoke-wrap{display:flex;gap:64px;align-items:end;margin-top:36px}
+  .stoke{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .tower{width:90px;height:180px;background:#ddd;border-radius:6px;position:relative;overflow:hidden}
+  .fill{position:absolute;bottom:0;left:0;width:100%;height:0;background:var(--green1)}
+  .fill.tmr{background:var(--green2)}
+  .caption{margin-top:6px;text-align:center;font-size:16px}
+  .rating-text{margin-top:6px;text-align:center;font-size:18px;font-weight:600}
+  .reason{font-size:18px;text-align:center}
+  .muted{color:#555;margin-top:10px}
+  .err{color:#b00020;margin-top:10px}
+  @media (max-width:900px){ .grid{grid-template-columns:1fr} h1{font-size:42px} .stoke-wrap{justify-content:space-around} }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <a class="back" href="index.html">← Back to search</a>
+  <a href="index.html">← Back to search</a>
   <header>
-    <h1 id="title">Resort</h1>
-    <div id="subtitle" class="muted"></div>
+    <h1 id="resortTitle">Ski Resort</h1>
   </header>
 
-  <div class="panel">
-    <div id="meta" class="chips"></div>
-    <div id="bars"></div>
-    <div id="msg" class="muted" style="margin-top:10px">Loading…</div>
-    <div id="err" class="err"></div>
+  <div class="grid">
+    <!-- LEFT: Snowfall -->
+    <section>
+      <div class="section-title">Snowfall:</div>
+
+      <div class="snow-row" id="row-today">
+        <div class="snow-bar" id="bar-today"></div>
+        <div class="snow-meta">
+          <div class="label-date" id="date-today">td date</div>
+          <div class="label-amount" id="amt-today">x inches</div>
+        </div>
+      </div>
+
+      <div class="snow-row" id="row-tmr">
+        <div class="snow-bar" id="bar-tmr"></div>
+        <div class="snow-meta">
+          <div class="label-date" id="date-tmr">tmr date</div>
+          <div class="label-amount" id="amt-tmr">x inches</div>
+        </div>
+      </div>
+
+      <div class="snow-row" id="row-7d">
+        <div class="snow-bar" id="bar-7d"></div>
+        <div class="snow-meta">
+          <div class="label-date" id="date-7d">last 7 days</div>
+          <div class="label-amount" id="amt-7d">x inches</div>
+        </div>
+      </div>
+
+      <div id="snowNote" class="muted"></div>
+    </section>
+
+    <!-- RIGHT: Stoke Rating -->
+    <section>
+      <div class="section-title" style="text-align:center">Stoke Rating:</div>
+
+      <div class="stoke-wrap">
+        <div class="stoke">
+          <div class="tower"><div class="fill" id="fill-td"></div></div>
+          <div class="caption" id="cap-td">Today (Date)</div>
+          <div class="rating-text" id="rt-td">Rating</div>
+          <div class="reason" id="rs-td">Reason</div>
+        </div>
+
+        <div class="stoke">
+          <div class="tower"><div class="fill tmr" id="fill-tmr"></div></div>
+          <div class="caption" id="cap-tmr">Tomorrow (Date)</div>
+          <div class="rating-text" id="rt-tmr">Rating</div>
+          <div class="reason" id="rs-tmr">Reason</div>
+        </div>
+      </div>
+
+      <div id="msg" class="muted">Loading…</div>
+      <div id="err" class="err"></div>
+    </section>
   </div>
 </div>
 
-<!-- Papa Parse for safe CSV parsing -->
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" defer></script>
+<!-- Papa Parse for robust CSV parsing -->
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
-/* ====== CONFIG: set your published CSV URL & headers ====== */
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv"; 
-// Example format:
-// https://docs.google.com/spreadsheets/d/e/XXXX/pub?gid=0&single=true&output=csv
+/* ===== Configure your published CSV URL & column names ===== */
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv"; // must include output=csv & gid=...
 const COLS = {
   resort:    "skiresort",
-  today:     "rating_td",
-  tomorrow:  "rating_tmr",
-  reasonTd:  "reason_td",    // optional
-  reasonTmr: "reason_tmr"    // optional
+  ratingTd:  "rating_td",
+  ratingTmr: "rating_tmr",
+  reasonTd:  "reason_td",
+  reasonTmr: "reason_tmr",
+  snow24h:   "snow24h",
+  tmrSnow:   "tmrsnow",
+  last7d:    "last7days" // hide if missing
 };
 /* ========================================================== */
 
-const ratingMap = {
-  "poor":      {score:20,  color:"#d32f2f"},
-  "fair":      {score:40,  color:"#fb8c00"},
-  "good":      {score:65,  color:"#fdd835"},
-  "excellent": {score:85,  color:"#43a047"},
-  "all time":  {score:100, color:"#1e88e5"},
-  "open":      {score:80,  color:"#2e7d32"},
-  "closed":    {score:10,  color:"#9e9e9e"}
-};
-
-const $ = id => document.getElementById(id);
 const lower = s => (s||"").toString().trim().toLowerCase();
+const $ = id => document.getElementById(id);
 
-function makeBar(label, rating, reason, metaEl){
-  const meta = ratingMap[lower(rating)] || {score:0,color:"#6b7c92"};
-  const row=document.createElement("div"); row.className="row";
-  const lbl=document.createElement("div"); lbl.className="label"; lbl.textContent=label;
-  const track=document.createElement("div"); track.className="track";
-  const fill=document.createElement("div"); fill.className="fill";
-  fill.style.width = Math.max(4, meta.score) + "%";
-  fill.style.background = meta.color;
-  const tag=document.createElement("div"); tag.className="tag"; tag.textContent=(rating||"—").toUpperCase();
-  track.append(fill,tag); row.append(lbl,track);
-  if (reason){
-    const chip=document.createElement("span"); chip.className="chip"; chip.textContent=reason;
-    metaEl.appendChild(chip);
-  }
-  return row;
+// Rating → % height + colors
+const ratingScore = r => ({
+  "poor":20, "fair":40, "good":65, "excellent":85, "all time":100, "open":80, "closed":10
+}[lower(r)] ?? 0);
+
+// Format helpers
+const today = new Date();
+const tomorrow = new Date(Date.now()+86400000);
+const fmt = d => d.toLocaleDateString(undefined,{month:"short",day:"numeric"});
+
+// Snow bar width scale (inches)
+function snowWidth(inches, maxInches){
+  const v = Math.max(0, Number(inches)||0);
+  const cap = Math.max(6, maxInches || 12); // dynamic cap but not too small
+  return Math.min(100, (v / cap) * 100);
 }
 
 function onError(txt){ $("err").textContent = txt; $("msg").textContent=""; }
 
-async function loadResort(){
-  const resortParam = new URLSearchParams(location.search).get("resort");
-  const resortQ = resortParam ? decodeURIComponent(resortParam) : "";
-  $("title").textContent = `Snow Signal — ${resortQ||"Resort"}`;
-  $("subtitle").textContent = resortQ || "No resort selected";
-  if(!resortQ){ $("msg").textContent = "Choose a resort from the search page."; return; }
+async function main(){
+  const resortParam = new URLSearchParams(location.search).get("resort") || "";
+  const resortQ = decodeURIComponent(resortParam);
+  $("resortTitle").textContent = resortQ || "Ski Resort";
+  if(!resortQ){ onError("No resort selected."); return; }
 
   try{
-    // fetch CSV
-    const res = await fetch(CSV_URL, { method:"GET", cache:"no-store" });
-    if(!res.ok) throw new Error("Sheet fetch failed: " + res.status);
-    const csvText = await res.text();
-
-    // parse CSV
-    const parsed = Papa.parse(csvText, { header:true, skipEmptyLines:true });
-    if (parsed.errors && parsed.errors.length) console.warn(parsed.errors);
-    const rows = parsed.data;
-    if(!rows || !rows.length){ $("msg").textContent = "No data."; return; }
-
-    // map headers (case-insensitive)
+    const r = await fetch(CSV_URL, {cache:"no-store"});
+    if(!r.ok) throw new Error("Sheet fetch failed: "+r.status);
+    const csv = await r.text();
+    const parsed = Papa.parse(csv, {header:true, skipEmptyLines:true});
+    const rows = parsed.data || [];
     const fields = parsed.meta.fields || [];
-    const findHdr = want => fields.find(h => lower(h) === lower(want));
+    const hdr = want => fields.find(h => lower(h) === lower(want));
+
     const H = {
-      resort: findHdr(COLS.resort),
-      today:  findHdr(COLS.today),
-      tmr:    findHdr(COLS.tomorrow),
-      rTd:    findHdr(COLS.reasonTd),
-      rTmr:   findHdr(COLS.reasonTmr)
+      resort:   hdr(COLS.resort),
+      ratingTd: hdr(COLS.ratingTd),
+      ratingTmr:hdr(COLS.ratingTmr),
+      reasonTd: hdr(COLS.reasonTd),
+      reasonTmr:hdr(COLS.reasonTmr),
+      snow24h:  hdr(COLS.snow24h),
+      tmrSnow:  hdr(COLS.tmrSnow),
+      last7d:   hdr(COLS.last7d)
     };
-    if(!H.resort || !H.today || !H.tmr){
-      onError(`Missing headers. Need at least: ${COLS.resort}, ${COLS.today}, ${COLS.tomorrow}`); 
-      return;
+    if(!H.resort){ onError(`Missing header: ${COLS.resort}`); return; }
+
+    const rec = rows.find(row => lower(row[H.resort]) === lower(resortQ));
+    if(!rec){ onError(`No row found for "${resortQ}".`); return; }
+
+    // --- Stoke section ---
+    const rtTD  = (rec[H.ratingTd]  || "").toString().trim();
+    const rtTMR = (rec[H.ratingTmr] || "").toString().trim();
+    const rsTD  = H.reasonTd  ? (rec[H.reasonTd]  || "").toString().trim() : "";
+    const rsTMR = H.reasonTmr ? (rec[H.reasonTmr] || "").toString().trim() : "";
+
+    $("fill-td").style.height  = Math.max(6, ratingScore(rtTD))  + "%";
+    $("fill-tmr").style.height = Math.max(6, ratingScore(rtTMR)) + "%";
+    $("cap-td").textContent  = `Today (${fmt(today)})`;
+    $("cap-tmr").textContent = `Tomorrow (${fmt(tomorrow)})`;
+    $("rt-td").textContent  = rtTD ? rtTD.charAt(0).toUpperCase()+rtTD.slice(1) : "—";
+    $("rt-tmr").textContent = rtTMR ? rtTMR.charAt(0).toUpperCase()+rtTMR.slice(1) : "—";
+    $("rs-td").textContent  = rsTD  || "";
+    $("rs-tmr").textContent = rsTMR || "";
+
+    // --- Snowfall section ---
+    const s24 = Number((H.snow24h && rec[H.snow24h]) || 0);
+    const stm = Number((H.tmrSnow && rec[H.tmrSnow]) || 0);
+    const s7d = H.last7d ? Number(rec[H.last7d] || 0) : null;
+
+    const maxVal = Math.max(6, s24, stm, s7d??0);
+    $("bar-today").style.width = snowWidth(s24, maxVal) + "%";
+    $("bar-tmr").style.width   = snowWidth(stm, maxVal) + "%";
+    $("amt-today").textContent = (isFinite(s24)? s24.toFixed(1):"0.0") + " inches";
+    $("amt-tmr").textContent   = (isFinite(stm)? stm.toFixed(1):"0.0") + " inches";
+    $("date-today").textContent = fmt(today);
+    $("date-tmr").textContent   = fmt(tomorrow);
+
+    if (s7d != null && isFinite(s7d)){
+      $("bar-7d").style.width   = snowWidth(s7d, maxVal) + "%";
+      $("amt-7d").textContent   = s7d.toFixed(1) + " inches";
+      $("date-7d").textContent  = "Last 7 days";
+      $("row-7d").style.display = "flex";
+      $("snowNote").textContent = "";
+    } else {
+      $("row-7d").style.display = "none";
+      $("snowNote").textContent = "Note: 7-day snowfall not available.";
     }
-
-    // find the matching row
-    const rec = rows.find(r => lower(r[H.resort]) === lower(resortQ));
-    if(!rec){ $("msg").textContent = `No row found for "${resortQ}".`; return; }
-
-    // render
-    $("subtitle").textContent = rec[H.resort] || resortQ;
-    const ratingTD  = (rec[H.today] || "").toString().trim();
-    const ratingTMR = (rec[H.tmr]   || "").toString().trim();
-    const reasonTD  = H.rTd  ? (rec[H.rTd]  || "").toString().trim() : "";
-    const reasonTMR = H.rTmr ? (rec[H.rTmr] || "").toString().trim() : "";
-
-    const metaEl = $("meta"), barsEl = $("bars");
-    metaEl.innerHTML = ""; barsEl.innerHTML = "";
-    const chip = document.createElement("span"); chip.className="chip"; chip.textContent = rec[H.resort] || resortQ; 
-    metaEl.appendChild(chip);
-
-    barsEl.appendChild(makeBar("Today",    ratingTD,  reasonTD,  metaEl));
-    barsEl.appendChild(makeBar("Tomorrow", ratingTMR, reasonTMR, metaEl));
 
     $("msg").textContent = "";
   }catch(err){
@@ -148,7 +217,7 @@ async function loadResort(){
   }
 }
 
-window.addEventListener("load", loadResort);
+window.addEventListener("load", main);
 </script>
 </body>
 </html>
