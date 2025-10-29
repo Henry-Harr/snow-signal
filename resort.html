@@ -1,141 +1,89 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Snow Signal — Resort</title>
 <style>
-  :root {
-    --text:#111; --muted:#444; --accent:#3c8bff;
-    --bar:#000; --bar-hover:#555;
-    --today:#7aa137; --tmr:#9edd3a; --d3:#b7ff4a;
+  :root{
+    --text:#111; --muted:#444; --bar:#000; --bar2:#555;
+    --td:#7aa137; --tmr:#9edd3a; --d3:#b7ff4a;
+    --badge:#111; --badgeText:#fff;
   }
   *{box-sizing:border-box}
-  body{
-    margin:0;
-    background:#fff;
-    color:var(--text);
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-  }
-  .wrap{
-    max-width:1200px;
-    margin:50px auto;
-    padding:0 24px;
-  }
-  h1{
-    font-size:64px;
-    margin:0;
-    font-weight:700;
-  }
-  h2{
-    font-size:40px;
-    margin:24px 0 12px;
-    font-weight:600;
-  }
-  .grid{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:48px;
-    align-items:start;
-    margin-top:20px;
-  }
-  .snow-info{
-    margin-top:20px;
-    font-size:22px;
-    line-height:1.8;
-  }
-  /* --- 7-day snowfall bars --- */
-  .snow-bars{
-    display:flex;
-    align-items:flex-end;
-    justify-content:space-between;
-    gap:10px;
-    margin-top:30px;
-  }
-  .bar{
-    width:60px;
-    background:var(--bar);
-    border-radius:4px 4px 0 0;
-    transition:background .2s, transform .2s;
-  }
-  .bar:hover{background:var(--bar-hover);transform:translateY(-4px);}
-  .bar-label{
-    text-align:center;
-    font-size:16px;
-    margin-top:4px;
-  }
-  .bar-inch{
-    text-align:center;
-    font-weight:600;
-    font-size:18px;
-  }
-  /* --- Stoke Ratings --- */
-  .ratings{
-    display:flex;
-    justify-content:space-around;
-    margin-top:40px;
-  }
-  .rating{
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    gap:8px;
-  }
-  .tower{
-    width:80px;
-    height:180px;
-    border-radius:4px 4px 0 0;
-    background:var(--today);
-    transition:transform .2s;
-  }
-  .tower:hover{transform:translateY(-6px);}
-  .tower.tmr{background:var(--tmr);}
-  .tower.d3{background:var(--d3);}
-  .rating-text{font-size:22px;font-weight:600;}
-  .reason{font-size:18px;color:var(--muted);}
-  @media(max-width:900px){
-    .grid{grid-template-columns:1fr;}
-    h1{font-size:48px;}
-  }
+  body{margin:0;background:#fff;color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:1200px;margin:50px auto;padding:0 24px}
+  header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+  h1{margin:0;font-size:64px;font-weight:700}
+  .right-head{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .badge{background:var(--badge);color:var(--badgeText);padding:6px 12px;border-radius:999px;font-size:14px;font-weight:600}
+  .link{color:#0066cc;text-decoration:none;border-bottom:1px solid #0066cc}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-top:24px}
+  h2{font-size:40px;margin:24px 0 12px}
+  .snow-info{margin-top:8px;font-size:22px;line-height:1.8}
+  .muted{color:var(--muted)}
+  .bars{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-top:20px}
+  .barwrap{display:flex;flex-direction:column;align-items:center}
+  .bar{width:64px;background:var(--bar);border-radius:4px 4px 0 0;transition:transform .15s, background .15s}
+  .bar:hover{transform:translateY(-4px);background:var(--bar2)}
+  .bar-lbl{font-size:16px;margin-top:6px}
+  .bar-inch{font-weight:700;font-size:18px}
+  .ratings{display:flex;justify-content:space-around;margin-top:20px}
+  .rate{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:140px}
+  .tower{width:80px;height:180px;border-radius:4px 4px 0 0;background:var(--td);transition:transform .15s}
+  .tower:hover{transform:translateY(-6px)}
+  .tower.tmr{background:var(--tmr)}
+  .tower.d3{background:var(--d3)}
+  .rtext{font-size:22px;font-weight:700}
+  .reason{font-size:18px;color:var(--muted);text-align:center;min-height:22px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .chip{border:1px solid #ddd;border-radius:999px;padding:6px 10px;font-size:12px;color:#333}
+  @media (max-width:900px){ .grid{grid-template-columns:1fr} h1{font-size:48px} }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1 id="resortTitle">Ski Resort</h1>
+  <header>
+    <h1 id="title">Ski Resort</h1>
+    <div class="right-head">
+      <span class="badge" id="openBadge">—</span>
+      <a id="siteLink" class="link" href="#" target="_blank" rel="noopener" style="display:none">Official site →</a>
+      <span class="muted" id="updated"></span>
+    </div>
+  </header>
 
   <div class="grid">
-    <!-- Left: Snowfall -->
+    <!-- LEFT: Snow -->
     <section>
       <div class="snow-info">
-        Season Snowfall: <span id="seasonSnow">x</span> inches<br>
-        Last 24 hours: <span id="last24">x</span> inches<br>
-        Last 72 hours: <span id="last72">x</span> inches
+        Season Snowfall: <span id="season">—</span> inches<br>
+        Last 24 hours: <span id="last24">—</span> inches<br>
+        Last 72 hours: <span id="last72">—</span> inches
       </div>
 
-      <h2>7 Day Snowfall:</h2>
-      <div class="snow-bars" id="snowBars">
-        <!-- JS fills -->
-      </div>
+      <h2>7 Day snowfall:</h2>
+      <div class="bars" id="bars"></div>
+      <div class="chips" id="metaChips"></div>
     </section>
 
-    <!-- Right: Ratings -->
+    <!-- RIGHT: Ratings -->
     <section>
       <h2>Stoke Rating:</h2>
       <div class="ratings">
-        <div class="rating">
+        <div class="rate">
           <div class="tower" id="tower-td"></div>
-          <div class="rating-text" id="rt-td">Rating</div>
-          <div class="reason" id="rs-td">Reason</div>
+          <div class="rtext" id="rt-td">—</div>
+          <div class="reason" id="rs-td"></div>
         </div>
-        <div class="rating">
+        <div class="rate">
           <div class="tower tmr" id="tower-tmr"></div>
-          <div class="rating-text" id="rt-tmr">Rating</div>
-          <div class="reason" id="rs-tmr">Reason</div>
+          <div class="rtext" id="rt-tmr">—</div>
+          <div class="reason" id="rs-tmr"></div>
         </div>
-        <div class="rating">
+        <div class="rate">
           <div class="tower d3" id="tower-d3"></div>
-          <div class="rating-text" id="rt-d3">Rating</div>
-          <div class="reason" id="rs-d3">Reason</div>
+          <div class="rtext" id="rt-d3">—</div>
+          <div class="reason" id="rs-d3"></div>
         </div>
       </div>
     </section>
@@ -145,58 +93,127 @@
 <!-- Papa Parse -->
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
+/* ---------- CONFIG: set your published CSV URL ---------- */
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv";
-const COLS = {
-  resort:"skiresort",
-  ratingTd:"rating_td", ratingTmr:"rating_tmr", ratingD3:"rating_day3",
-  reasonTd:"reason_td", reasonTmr:"reason_tmr", reasonD3:"reason_day3",
-  season:"seasonsnow", last24:"last24hr", last72:"last72hr",
-  d1:"snow24h", d2:"tmrsnow", d3:"3snow", d4:"4snow", d5:"5snow", d6:"6snow", d7:"7snow"
+
+/* ---------- Column names (must match your sheet headers) ---------- */
+const COL = {
+  skiresort: "skiresort", Lat: "Lat", Lon: "Lon",
+  last7days: "last7days", last72hr:"last72hr", last24hr:"last24hr",
+  snow24h:"snow24h", tmrsnow:"tmrsnow","3snow":"3snow","4snow":"4snow","5snow":"5snow","6snow":"6snow","7snow":"7snow",
+  openingday:"openingday", url:"url", seasonsnow:"seasonsnow",
+  wind_td:"wind_td", wind_tmr:"wind_tmr", wind_day3:"wind_day3",
+  rating_td:"rating_td", rating_tmr:"rating_tmr", rating_day3:"rating_day3",
+  reason_td:"reason_td", reason_tmr:"reason_tmr", reason_day3:"reason_day3",
+  softr:"🔐 Softr Record ID" // ignored, but won’t break anything
 };
-const $=id=>document.getElementById(id);
-const toNum=v=>{const m=String(v||"").match(/-?\\d+(\\.\\d+)?/);return m?+m[0]:0;};
-const ratingColor=(r)=>({"poor":"#9b1c1c","fair":"#f59e0b","good":"#84cc16","excellent":"#22c55e","all time":"#16a34a"}[r.toLowerCase()]||"#999");
 
+/* ---------- Helpers ---------- */
+const $ = id => document.getElementById(id);
+const lower = s => (s??"").toString().trim().toLowerCase();
+const toNum = v => {
+  const m = String(v ?? "").replace(",", "").match(/-?\d+(\.\d+)?/);
+  return m ? Number(m[0]) : 0;
+};
+const nice = n => (isFinite(n) ? n.toFixed(1) : "0.0");
+const dPlus = i => new Date(Date.now() + i*86400000).toLocaleDateString(undefined,{month:"short",day:"numeric"});
+
+/* Rating → height % and color (keeps your simple tower look) */
+function tower(rating, id){
+  const map = {"poor":18,"fair":40,"good":68,"excellent":88,"all time":100};
+  const p = map[lower(rating)] ?? 0;
+  $(id).style.height = Math.max(6, p) + "%";
+}
+
+/* ---------- Main ---------- */
 async function main(){
-  const name = new URLSearchParams(location.search).get("resort")||"";
-  $("resortTitle").textContent = name || "Ski Resort";
+  const q = new URLSearchParams(location.search);
+  const resortQ = q.get("resort") || "";
+  $("title").textContent = resortQ || "Ski Resort";
+  $("title").id = "title";
+  $("updated").textContent = new Date().toLocaleString();
 
-  const res = await fetch(CSV_URL); const text = await res.text();
-  const parsed = Papa.parse(text,{header:true,skipEmptyLines:true});
-  const row = parsed.data.find(r => (r[COLS.resort]||"").toLowerCase()===name.toLowerCase());
-  if(!row) return alert("Resort not found in sheet.");
+  if(!resortQ){ alert("Add ?resort=Name to the URL."); return; }
 
-  $("seasonSnow").textContent = toNum(row[COLS.season]).toFixed(1);
-  $("last24").textContent = toNum(row[COLS.last24]).toFixed(1);
-  $("last72").textContent = toNum(row[COLS.last72]).toFixed(1);
+  const resp = await fetch(CSV_URL, {cache:"no-store"});
+  const text = await resp.text();
+  const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+  const rows = parsed.data || [];
 
-  // 7-day chart
-  const days = ["d1","d2","d3","d4","d5","d6","d7"];
-  const data = days.map(d=>toNum(row[COLS[d]]));
-  const max = Math.max(...data,6);
-  $("snowBars").innerHTML = data.map((v,i)=>{
-    const d = new Date(Date.now() + i*86400000);
-    const label = d.toLocaleDateString(undefined,{month:"short",day:"numeric"});
-    const h = (v/max)*140;
-    return `<div>
-      <div class="bar" style="height:${h}px"></div>
-      <div class="bar-label">${label}</div>
-      <div class="bar-inch">${v.toFixed(1)}"</div>
-    </div>`;
+  const row = rows.find(r => lower(r[COL.skiresort]) === lower(resortQ));
+  if(!row){ alert("Resort not found in sheet."); return; }
+
+  // Header title
+  $("title").textContent = row[COL.skiresort] || resortQ;
+
+  // OPEN/CLOSED badge
+  const status = (row[COL.openingday]||"").toString().toUpperCase();
+  const open = status === "OPEN";
+  $("openBadge").textContent = open ? "OPEN" : (status || "STATUS N/A");
+  $("openBadge").style.background = open ? "#0a7c2e" : "#7c0a0a";
+
+  // Optional link
+  if(row[COL.url]){
+    $("siteLink").href = row[COL.url];
+    $("siteLink").style.display = "inline";
+  }
+
+  // Left info
+  $("season").textContent = nice(toNum(row[COL.seasonsnow]));
+  $("last24").textContent = nice(toNum(row[COL.last24hr]));
+  $("last72").textContent = nice(toNum(row[COL.last72hr]));
+
+  // 7-day bars: tomorrow → +6 (uses tmrsnow,3snow,4snow,5snow,6snow,7snow)
+  const seq = [
+    {key: COL.tmrsnow, label: dPlus(1)},
+    {key: COL["3snow"], label: dPlus(2)},
+    {key: COL["4snow"], label: dPlus(3)},
+    {key: COL["5snow"], label: dPlus(4)},
+    {key: COL["6snow"], label: dPlus(5)},
+    {key: COL["7snow"], label: dPlus(6)},
+  ];
+  const vals = seq.map(s => toNum(row[s.key]));
+  const max = Math.max(6, ...vals);
+  $("bars").innerHTML = seq.map((s, i) => {
+    const v = vals[i];
+    const h = (v / max) * 160; // px height
+    return `
+      <div class="barwrap">
+        <div class="bar" style="height:${h}px"></div>
+        <div class="bar-lbl">${s.label}</div>
+        <div class="bar-inch">${nice(v)} in</div>
+      </div>
+    `;
   }).join("");
 
-  // Ratings
-  [["td","ratingTd","reasonTd"],["tmr","ratingTmr","reasonTmr"],["d3","ratingD3","reasonD3"]]
-  .forEach(([tag,rc,rs])=>{
-    const rating=(row[COLS[rc]]||"").trim();
-    const reason=(row[COLS[rs]]||"").trim();
-    $(`tower-${tag}`).style.background = ratingColor(rating||"");
-    $(`rt-${tag}`).textContent = rating ? rating.charAt(0).toUpperCase()+rating.slice(1) : "—";
-    $(`rs-${tag}`).textContent = reason || "";
-  });
+  // Meta chips (next 24h rolling + last 7 days)
+  const chips = [];
+  if (row[COL.snow24h]) chips.push(`Next 24h: ${nice(toNum(row[COL.snow24h]))} in`);
+  if (row[COL.last7days]) chips.push(`Last 7 days: ${nice(toNum(row[COL.last7days]))} in`);
+  if (row[COL.wind_td]) chips.push(`Wind today: ${nice(toNum(row[COL.wind_td]))} mph`);
+  if (row[COL.wind_tmr]) chips.push(`Wind tomorrow: ${nice(toNum(row[COL.wind_tmr]))} mph`);
+  if (row[COL.wind_day3]) chips.push(`Wind day 3: ${nice(toNum(row[COL.wind_day3]))} mph`);
+  $("metaChips").innerHTML = chips.map(c => `<div class="chip">${c}</div>`).join("");
+
+  // Ratings (+ reasons)
+  const rTD  = (row[COL.rating_td]  || "").toString();
+  const rTMR = (row[COL.rating_tmr] || "").toString();
+  const rD3  = (row[COL.rating_day3]|| "").toString();
+
+  tower(rTD,  "tower-td");
+  tower(rTMR, "tower-tmr");
+  tower(rD3,  "tower-d3");
+
+  $("rt-td").textContent  = rTD  || "—";
+  $("rt-tmr").textContent = rTMR || "—";
+  $("rt-d3").textContent  = rD3  || "—";
+
+  $("rs-td").textContent  = (row[COL.reason_td]  || "");
+  $("rs-tmr").textContent = (row[COL.reason_tmr] || "");
+  $("rs-d3").textContent  = (row[COL.reason_day3]|| "");
 }
-window.addEventListener("load",main);
+
+window.addEventListener("load", main);
 </script>
 </body>
 </html>
-
