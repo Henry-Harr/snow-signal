@@ -94,6 +94,14 @@
   /* FOOTER */
   footer{margin-top:26px;color:var(--muted);font-size:12px;text-align:center}
   a{color:var(--accent)}
+.hbar-shell{width:100%;height:16px;border:1px solid var(--glass-brd);background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden;margin-top:4px}
+.hbar{height:100%;width:0%;background:linear-gradient(90deg, var(--accent), var(--accent2));box-shadow:0 6px 18px rgba(124,201,255,.25);transition:width .6s ease}
+.pcent{font-size:12px;color:#cfe5ff;margin-top:4px;font-weight:800}
+.g-wrap,.gauge,.g-label{display:none!important}
+.wrap{max-width:1100px;margin:16px auto;padding:0 16px 12px}
+header{margin-bottom:8px}
+.grid{gap:16px}
+.bars{gap:10px;flex-wrap:wrap;overflow:hidden}
 </style>
 </head>
 <body>
@@ -119,7 +127,7 @@
         <div class="stat"><div class="k">Last 24 Hours</div><div class="v" id="last24">—</div></div>
         <div class="stat"><div class="k">Last 72 Hours</div><div class="v" id="last72">—</div></div>
       </div>
-      <div class="chips" id="chips"></div>
+      
       <div class="bars" id="bars"></div>
     </section>
 
@@ -128,9 +136,27 @@
       <h2>Stoke Rating</h2>
       <div class="ratings">
         <div class="rate">
-          <div class="g-wrap">
-            <svg class="gauge" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" stroke="rgba(255,255,255,.08)" stroke-width="12" fill="none"/><circle id="g-td" cx="60" cy="60" r="52" stroke-dasharray="326" stroke-dashoffset="326" stroke-linecap="round" stroke-width="12" fill="none"/></svg>
-            <div class="g-label" id="gtext-td">—</div>
+          <div class="cap">Today</div>
+          <div class="hbar-shell"><div class="hbar" id="g-td"></div></div>
+          <div class="pcent" id="gtext-td">—</div>
+          <div class="rtext" id="rt-td">—</div>
+          <div class="reason" id="rs-td"></div>
+        </div>
+        <div class="rate">
+          <div class="cap">Tomorrow</div>
+          <div class="hbar-shell"><div class="hbar" id="g-tmr"></div></div>
+          <div class="pcent" id="gtext-tmr">—</div>
+          <div class="rtext" id="rt-tmr">—</div>
+          <div class="reason" id="rs-tmr"></div>
+        </div>
+        <div class="rate">
+          <div class="cap">Day 3</div>
+          <div class="hbar-shell"><div class="hbar" id="g-d3"></div></div>
+          <div class="pcent" id="gtext-d3">—</div>
+          <div class="rtext" id="rt-d3">—</div>
+          <div class="reason" id="rs-d3"></div>
+        </div>
+      </div>
           </div>
           <div class="cap">Today</div>
           <div class="rtext" id="rt-td">—</div>
@@ -160,9 +186,7 @@
     </section>
   </div>
 
-  <footer>
-    Powered by <strong>Snow Signal</strong> • Use <code>?resort=Your Resort Name</code> in the URL
-  </footer>
+  
 </div>
 
 <!-- Papa Parse -->
@@ -170,12 +194,24 @@
 <script>
 const CSV_URL = `https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv`;
 const NEED = {
-  skiresort:"skiresort",
-  seasonsnow:"seasonsnow", last24hr:"last24hr", last72hr:"last72hr",
-  snow24h:"snow24h", tmrsnow:"tmrsnow","3snow":"3snow","4snow":"4snow","5snow":"5snow","6snow":"6snow","7snow":"7snow",
-  openingday:"openingday",
-  rating_td:"rating_td", rating_tmr:"rating_tmr", rating_day3:"rating_day3",
-  reason_td:"reason_td", reason_tmr:"reason_tmr", reason_day3:"reason_day3"
+  skiresort:["skiresort","resort","name"],
+  seasonsnow:["seasonsnow","season snow","season_total","season","season inches"],
+  last24hr:["last24hr","24h","last 24","snow24","snow_24","24hr"],
+  last72hr:["last72hr","72h","last 72","snow72","snow_72","72hr"],
+  snow24h:["snow24h","next24h","next 24","d0","today snow"],
+  tmrsnow:["tmrsnow","tomorrow","d1","day1"],
+  "3snow":["3snow","d2","day2"],
+  "4snow":["4snow","d3","day3"],
+  "5snow":["5snow","d4","day4"],
+  "6snow":["6snow","d5","day5"],
+  "7snow":["7snow","d6","day6"],
+  openingday:["openingday","status","open","operating"],
+  rating_td:["rating_td","today rating","today"],
+  rating_tmr:["rating_tmr","tomorrow rating","tmr rating"],
+  rating_day3:["rating_day3","day3 rating","d3 rating"],
+  reason_td:["reason_td","today reason","today why"],
+  reason_tmr:["reason_tmr","tmr reason","tomorrow why"],
+  reason_day3:["reason_day3","day3 reason","d3 why"]
 };
 const $ = id=>document.getElementById(id);
 const lower=s=> (s??"").toString().trim().toLowerCase();
@@ -197,15 +233,16 @@ function setBadge(status){
   const open = s === "OPEN";
   badge.textContent = open? "OPEN" : (s||"STATUS N/A");
   badge.className = "badge "+(open?"open":"closed");
-  up.textContent = "Updated "+ new Date().toLocaleString();
+  up.textContent = "Powered by Pow Signal";
 }
 
 /* Draw circular gauge (326 ≈ circumference for r=52) */
-function drawGauge(id, pct, col){
-  const c = $(id); if(!c) return;
-  const circumference = 2*Math.PI*52; // 326.72
-  const offset = circumference * (1 - Math.max(0, Math.min(100,pct))/100);
-  c.style.stroke = col; c.style.filter = `drop-shadow(0 4px 14px ${col}55)`;
+function drawBar(id, pct, col){
+  const el = document.getElementById(id); if(!el) return;
+  el.style.background = `linear-gradient(90deg, ${col}, var(--accent2))`;
+  el.style.width = '0%';
+  requestAnimationFrame(()=>{ el.style.width = Math.max(0, Math.min(100, pct)) + '%'; });
+}55)`;
   c.style.transition = "stroke-dashoffset .8s ease";
   c.setAttribute("stroke-dasharray", circumference.toFixed(2));
   c.setAttribute("stroke-dashoffset", circumference.toFixed(2));
@@ -213,7 +250,17 @@ function drawGauge(id, pct, col){
 }
 
 function setRating(prefix, rating, reason){
-  const {pct,col} = ratingStyle(rating);
+  const rs = (rating||'').toString();
+  const key = rs.trim().toLowerCase();
+  const pctMap = {poor:18,fair:42,good:68,excellent:88,"all time":100};
+  const colMap = {poor:'#ef4444',fair:'#f59e0b',good:'#84cc16',excellent:'#22c55e','all time':'#16a34a'};
+  const pct = pctMap[key] ?? 0;
+  const col = colMap[key] ?? '#94a3b8';
+  drawBar('g-'+prefix, pct, col);
+  document.getElementById('gtext-'+prefix).textContent = Math.round(pct)+'%';
+  document.getElementById('rt-'+prefix).textContent = rs || '—';
+  document.getElementById('rs-'+prefix).textContent = reason || '';
+} = ratingStyle(rating);
   drawGauge("g-"+prefix, pct, col);
   $("gtext-"+prefix).textContent = Math.round(pct)+"%";
   $("rt-"+prefix).textContent = rating ? rating.replace(/\b\w/g,c=>c.toUpperCase()) : "—";
@@ -240,14 +287,45 @@ async function main(){
 
   // Case-insensitive header map
   const fields = parsed.meta.fields || [];
-  const hmap = {}; fields.forEach(h=> hmap[lower(h)] = h);
-  const H={}; for(const [k,w] of Object.entries(NEED)) H[k] = hmap[lower(w)] || null;
+const lowers = fields.map(f=>({raw:f, low:lower(f)}));
+function findHeader(cands){
+  for(const c of (Array.isArray(cands)?cands:[cands])){
+    const lc = lower(c);
+    // exact first
+    const exact = lowers.find(o=> o.low === lc); if(exact) return exact.raw;
+  }
+  // loose contains
+  for(const c of (Array.isArray(cands)?cands:[cands])){
+    const lc = lower(c);
+    const cont = lowers.find(o=> o.low.includes(lc)); if(cont) return cont.raw;
+  }
+  return null;
+}
+const H = {};
+for(const [k,cands] of Object.entries(NEED)) H[k] = findHeader(cands);
 
   const rows = parsed.data || [];
-  const row = rows.find(r => H.skiresort && lower(r[H.skiresort]) === lower(resortQ)) || rows[0] || null;
-  if(!row){ alert("No data rows present in sheet."); return; }
+  let row = null;
+if(rows.length){
+  if(resortQ){
+    row = rows.find(r => H.skiresort && lower(r[H.skiresort]) === lower(resortQ));
+  }
+  if(!row) row = rows[0];
+}
+if(!row){
+  const err = document.createElement('div');
+  err.style.color = '#fca5a5'; err.style.marginTop = '10px';
+  err.textContent = 'No rows found in the sheet.';
+  document.body.appendChild(err); return;
+}
+if(resortQ && H.skiresort && lower(row[H.skiresort]) !== lower(resortQ)){
+  const warn = document.createElement('div');
+  warn.style.color = '#f59e0b'; warn.style.marginTop='8px';
+  warn.textContent = `Resort "${resortQ}" not found. Showing first row: ${row[H.skiresort] || 'Unknown'}`;
+  document.body.appendChild(warn);
+}
 
-  $("title").textContent = row[H.skiresort] || resortQ || "Ski Resort";
+  $("title").textContent = (H.skiresort && row[H.skiresort]) || resortQ || "Ski Resort";
   setBadge(H.openingday ? row[H.openingday] : "");
 
   // Left stats
@@ -259,12 +337,7 @@ async function main(){
   $("last72").textContent = nice(l72)+" in";
 
   // Chips summary
-  const chips = $("chips"); chips.innerHTML='';
-  chips.append(
-    chip(`Next 24h: ${nice(H.snow24h? toNum(row[H.snow24h]) : 0)} in`),
-    chip(`Tomorrow: ${nice(H.tmrsnow? toNum(row[H.tmrsnow]) : 0)} in`),
-    chip(`3‑Day Total: ${nice((H.snow24h?toNum(row[H.snow24h]):0)+(H.tmrsnow?toNum(row[H.tmrsnow]):0)+(H["3snow"]?toNum(row[H["3snow"]]):0))} in`)
-  );
+  
 
   // 7‑day bars (Next 24h + D1..D6)
   const seq = [
