@@ -6,146 +6,208 @@
 <title>Snow Signal — Resort</title>
 <style>
   :root{
-    --bg:#ffffff; --text:#111; --muted:#333; --line:#111; --bar:#111;
-    --green1:#7aa137; --green2:#9edd3a;
+    --bg:#0b0f14; --panel:#0f1722; --panel2:#111a27; --text:#e8f2ff; --muted:#9fb1c6;
+    --line:#223144; --chip:#152235; --accent:#8cc0ff; --ok1:#6ee7b7; --ok2:#34d399; --warn:#f59e0b; --bad:#ef4444;
+    --glow: 0 20px 40px rgba(0,0,0,.45), 0 0 60px rgba(40,140,255,.07);
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-  .wrap{max-width:1200px;margin:36px auto;padding:0 24px}
-  a{color:#3366ee;text-decoration:none}
-  header{display:flex;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:12px}
-  h1{margin:0;font-size:64px;font-weight:700;letter-spacing:.5px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:12px}
-  .section-title{font-size:40px;font-weight:600;margin:24px 0 12px}
-  /* Snowfall small bars (horizontal) */
-  .snow-row{display:flex;align-items:center;gap:12px;margin:20px 0}
-  .snow-bar{flex:0 0 160px;height:16px;background:var(--bar);border-radius:3px}
-  .snow-meta{display:flex;flex-direction:column;gap:6px}
-  .label-date{font-size:18px}
-  .label-amount{font-size:22px;font-weight:600}
-  /* Stoke vertical bars */
-  .stoke-wrap{display:flex;gap:64px;align-items:end;margin-top:36px}
+  html,body{height:100%}
+  body{margin:0;background:radial-gradient(1200px 900px at 20% -10%,#0d1521,#0b0f14 50%,#0a0d12 100%);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  a{color:var(--accent);text-decoration:none}
+  .wrap{max-width:1180px;margin:34px auto;padding:0 20px}
+  header{display:flex;align-items:baseline;justify-content:space-between;gap:16px}
+  h1{margin:0;font-size:42px;letter-spacing:.3px;font-weight:800}
+  .badge{font-size:13px;background:linear-gradient(180deg,#132033,#0d1828);border:1px solid #1a2a40;padding:6px 10px;border-radius:999px;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:1.25fr .95fr;gap:28px;margin-top:18px}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid #162233;border-radius:18px;padding:18px;box-shadow:var(--glow)}
+  .title{display:flex;align-items:center;gap:10px;font-size:16px;color:var(--muted);text-transform:uppercase;letter-spacing:.14em;margin-bottom:12px}
+
+  /* Snow snapshot rows */
+  .rows{display:flex;flex-direction:column;gap:14px}
+  .row{display:flex;align-items:center;gap:14px}
+  .bar{flex:1;height:14px;background:#0d1a2a;border:1px solid #1a2b43;border-radius:10px;position:relative;overflow:hidden}
+  .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#2ea8ff,#7cc7ff);box-shadow:0 0 18px rgba(124,199,255,.25) inset}
+  .amt{min-width:86px;text-align:right;font-variant-numeric:tabular-nums}
+  .label{min-width:124px;color:var(--muted)}
+
+  /* 7-day forecast mini chart */
+  .seven{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-top:16px}
+  .dcol{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .stick{width:20px;height:110px;border-radius:10px;background:#0e1a29;border:1px solid #1b2b43;position:relative;overflow:hidden}
+  .stick .h{position:absolute;bottom:0;left:0;right:0;height:0;background:linear-gradient(180deg,#87e6ff,#3898ff)}
+  .dlabel{font-size:12px;color:var(--muted)}
+  .dinch{font-size:12px;opacity:.95}
+
+  /* Ratings “towers” */
+  .stokes{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:6px}
   .stoke{display:flex;flex-direction:column;align-items:center;gap:10px}
-  .tower{width:90px;height:180px;background:#ddd;border-radius:6px;position:relative;overflow:hidden}
-  .fill{position:absolute;bottom:0;left:0;width:100%;height:0;background:var(--green1)}
-  .fill.tmr{background:var(--green2)}
-  .caption{margin-top:6px;text-align:center;font-size:16px}
-  .rating-text{margin-top:6px;text-align:center;font-size:18px;font-weight:600}
-  .reason{font-size:18px;text-align:center}
-  .muted{color:#555;margin-top:10px}
-  .err{color:#b00020;margin-top:10px}
-  @media (max-width:900px){ .grid{grid-template-columns:1fr} h1{font-size:42px} .stoke-wrap{justify-content:space-around} }
+  .tower{width:90px;height:180px;border-radius:16px;background:linear-gradient(180deg,#0f1c2b,#0b1420);border:1px solid #162236;position:relative;overflow:hidden}
+  .tower .lvl{position:absolute;left:0;bottom:0;width:100%;height:0;background:linear-gradient(180deg,#34d399,#10b981)}
+  .tower .lvl.warn{background:linear-gradient(180deg,#f59e0b,#fbbf24)}
+  .tower .lvl.bad{background:linear-gradient(180deg,#ef4444,#f87171)}
+  .cap{font-size:13px;color:var(--muted)}
+  .rtext{font-weight:800;font-size:18px;letter-spacing:.3px}
+  .reason{font-size:13px;color:var(--muted);text-align:center;min-height:18px}
+
+  /* Chips */
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .chip{background:var(--chip);border:1px solid #1a2a40;border-radius:999px;padding:6px 10px;color:var(--muted);font-size:12px}
+
+  .foot{margin-top:10px;color:var(--muted);font-size:12px}
+  .err{color:#ffb4b4;margin-top:12px}
+  @media (max-width:1000px){ .grid{grid-template-columns:1fr} .tower{height:160px;width:78px} }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <a href="index.html">← Back to search</a>
   <header>
     <h1 id="resortTitle">Ski Resort</h1>
+    <span class="badge" id="updatedAt">Loading…</span>
   </header>
 
   <div class="grid">
-    <!-- LEFT: Snowfall -->
-    <section>
-      <div class="section-title">Snowfall:</div>
+    <!-- LEFT: Snow -->
+    <section class="card">
+      <div class="title">Snow Overview</div>
 
-      <div class="snow-row" id="row-today">
-        <div class="snow-bar" id="bar-today"></div>
-        <div class="snow-meta">
-          <div class="label-date" id="date-today">td date</div>
-          <div class="label-amount" id="amt-today">x inches</div>
+      <div class="rows">
+        <div class="row">
+          <div class="label">Next 24 hours</div>
+          <div class="bar"><div class="fill" id="bar-next24"></div></div>
+          <div class="amt" id="amt-next24">—</div>
+        </div>
+        <div class="row">
+          <div class="label">Last 7 days</div>
+          <div class="bar"><div class="fill" id="bar-last7"></div></div>
+          <div class="amt" id="amt-last7">—</div>
         </div>
       </div>
 
-      <div class="snow-row" id="row-tmr">
-        <div class="snow-bar" id="bar-tmr"></div>
-        <div class="snow-meta">
-          <div class="label-date" id="date-tmr">tmr date</div>
-          <div class="label-amount" id="amt-tmr">x inches</div>
-        </div>
+      <div class="chips" id="recentChips">
+        <div class="chip" id="chip-24">Last 24h: —</div>
+        <div class="chip" id="chip-72">Last 72h: —</div>
       </div>
 
-      <div class="snow-row" id="row-7d">
-        <div class="snow-bar" id="bar-7d"></div>
-        <div class="snow-meta">
-          <div class="label-date" id="date-7d">last 7 days</div>
-          <div class="label-amount" id="amt-7d">x inches</div>
-        </div>
-      </div>
+      <div class="title" style="margin-top:18px">7-Day Forecast</div>
+      <div class="seven" id="seven"></div>
 
-      <div id="snowNote" class="muted"></div>
+      <div class="foot" id="snowNote"></div>
+      <div class="err" id="errL"></div>
     </section>
 
-    <!-- RIGHT: Stoke Rating -->
-    <section>
-      <div class="section-title" style="text-align:center">Stoke Rating:</div>
+    <!-- RIGHT: Ratings -->
+    <section class="card">
+      <div class="title" style="justify-content:space-between">
+        <span>Stoke Ratings</span>
+        <span class="badge"><a href="index.html">← Back</a></span>
+      </div>
 
-      <div class="stoke-wrap">
+      <div class="stokes">
         <div class="stoke">
-          <div class="tower"><div class="fill" id="fill-td"></div></div>
-          <div class="caption" id="cap-td">Today (Date)</div>
-          <div class="rating-text" id="rt-td">Rating</div>
-          <div class="reason" id="rs-td">Reason</div>
+          <div class="tower"><div class="lvl" id="lvl-td"></div></div>
+          <div class="cap" id="cap-td">Today</div>
+          <div class="rtext" id="rt-td">—</div>
+          <div class="reason" id="rs-td"></div>
         </div>
-
         <div class="stoke">
-          <div class="tower"><div class="fill tmr" id="fill-tmr"></div></div>
-          <div class="caption" id="cap-tmr">Tomorrow (Date)</div>
-          <div class="rating-text" id="rt-tmr">Rating</div>
-          <div class="reason" id="rs-tmr">Reason</div>
+          <div class="tower"><div class="lvl" id="lvl-tmr"></div></div>
+          <div class="cap" id="cap-tmr">Tomorrow</div>
+          <div class="rtext" id="rt-tmr">—</div>
+          <div class="reason" id="rs-tmr"></div>
+        </div>
+        <div class="stoke">
+          <div class="tower"><div class="lvl" id="lvl-d3"></div></div>
+          <div class="cap" id="cap-d3">Day 3</div>
+          <div class="rtext" id="rt-d3">—</div>
+          <div class="reason" id="rs-d3"></div>
         </div>
       </div>
 
-      <div id="msg" class="muted">Loading…</div>
-      <div id="err" class="err"></div>
+      <div class="foot" id="msg">Loading…</div>
+      <div class="err" id="errR"></div>
     </section>
   </div>
 </div>
 
-<!-- Papa Parse for robust CSV parsing -->
+<!-- Papa Parse -->
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
-/* ===== Configure your published CSV URL & column names ===== */
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv"; // must include output=csv & gid=...
+/* ====== Configure your published CSV URL & column names ====== */
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGijpvcmz6TA1HWmDc4njQx7vS0gZ4WSfUrw2EgLT9_aVOX3LFfyIL3datSI9gVswmUadZuHoGx6Hw/pub?output=csv";
+
 const COLS = {
-  resort:    "skiresort",
-  ratingTd:  "rating_td",
-  ratingTmr: "rating_tmr",
-  reasonTd:  "reason_td",
-  reasonTmr: "reason_tmr",
-  snow24h:   "snow24h",
-  tmrSnow:   "tmrsnow",
-  last7d:    "last7days" // hide if missing
+  resort:     "skiresort",
+  // Ratings
+  ratingTd:   "rating_td",
+  ratingTmr:  "rating_tmr",
+  ratingD3:   "rating_day3",
+  reasonTd:   "reason_td",
+  reasonTmr:  "reason_tmr",
+  reasonD3:   "reason_day3",
+  // Snow windows
+  next24:     "snow24h",    // next 24h rolling forecast
+  last24:     "last24hr",
+  last72:     "last72hr",
+  last7d:     "last7days",
+  // 7-day forecast by calendar-day (D+1..D+7). Some may be missing; we skip gracefully.
+  d1:         "tmrsnow",
+  d2:         "3snow",
+  d3:         "4snow",
+  d4:         "5snow",
+  d5:         "6snow",
+  d6:         "7snow"       // D+6 relative to tomorrow; six slots is plenty visually
 };
-/* ========================================================== */
+/* ============================================================= */
 
-const lower = s => (s||"").toString().trim().toLowerCase();
 const $ = id => document.getElementById(id);
+const lower = s => (s||"").toString().trim().toLowerCase();
+const toNum = v => {
+  // Accept "3.5", "3.5in", " 3.5 in ", or blank
+  const m = String(v ?? "").toLowerCase().replace(",", "").match(/-?\d+(\.\d+)?/);
+  return m ? Number(m[0]) : 0;
+};
 
-// Rating → % height + colors
-const ratingScore = r => ({
-  "poor":20, "fair":40, "good":65, "excellent":85, "all time":100, "open":80, "closed":10
-}[lower(r)] ?? 0);
-
-// Format helpers
-const today = new Date();
-const tomorrow = new Date(Date.now()+86400000);
-const fmt = d => d.toLocaleDateString(undefined,{month:"short",day:"numeric"});
-
-// Snow bar width scale (inches)
-function snowWidth(inches, maxInches){
-  const v = Math.max(0, Number(inches)||0);
-  const cap = Math.max(6, maxInches || 12); // dynamic cap but not too small
-  return Math.min(100, (v / cap) * 100);
+// Rating → % height + color mood
+function ratingScore(r){
+  const m = {
+    "poor": {p:18, cls:"bad"},
+    "fair": {p:40, cls:"warn"},
+    "good": {p:68, cls:""},
+    "excellent": {p:88, cls:""},
+    "all time": {p:100, cls:""}
+  };
+  const key = lower(r);
+  return m[key] || {p:0, cls:""};
+}
+function setTower(elId, textId, reasonId, rating, reason){
+  const el = $(elId), txt = $(textId), rs = $(reasonId);
+  const {p, cls} = ratingScore(rating);
+  el.style.height = Math.max(6, p) + "%";
+  el.classList.remove("warn","bad");
+  if(cls) el.classList.add(cls);
+  txt.textContent = rating ? rating.replace(/\b\w/g, c=>c.toUpperCase()) : "—";
+  rs.textContent = reason || "";
 }
 
-function onError(txt){ $("err").textContent = txt; $("msg").textContent=""; }
+// Snow bars
+function setBar(barId, amtId, inches, max=12){
+  const v = Math.max(0, +inches || 0);
+  $(barId).style.width = Math.min(100, (v/Math.max(6, max))*100) + "%";
+  $(amtId).textContent = v.toFixed(1) + " in";
+}
+
+function dPlusLabel(offset){ // 1..7
+  const d = new Date(Date.now() + offset*86400000);
+  return d.toLocaleDateString(undefined,{month:"short", day:"numeric"});
+}
 
 async function main(){
   const resortParam = new URLSearchParams(location.search).get("resort") || "";
   const resortQ = decodeURIComponent(resortParam);
   $("resortTitle").textContent = resortQ || "Ski Resort";
-  if(!resortQ){ onError("No resort selected."); return; }
+  $("updatedAt").textContent = new Date().toLocaleString();
+
+  if(!resortQ){ $("errR").textContent = "No resort specified (?resort=...)"; return; }
 
   try{
     const r = await fetch(CSV_URL, {cache:"no-store"});
@@ -153,67 +215,85 @@ async function main(){
     const csv = await r.text();
     const parsed = Papa.parse(csv, {header:true, skipEmptyLines:true});
     const rows = parsed.data || [];
-    const fields = parsed.meta.fields || [];
+    const fields = (parsed.meta && parsed.meta.fields) || [];
     const hdr = want => fields.find(h => lower(h) === lower(want));
 
-    const H = {
-      resort:   hdr(COLS.resort),
-      ratingTd: hdr(COLS.ratingTd),
-      ratingTmr:hdr(COLS.ratingTmr),
-      reasonTd: hdr(COLS.reasonTd),
-      reasonTmr:hdr(COLS.reasonTmr),
-      snow24h:  hdr(COLS.snow24h),
-      tmrSnow:  hdr(COLS.tmrSnow),
-      last7d:   hdr(COLS.last7d)
-    };
-    if(!H.resort){ onError(`Missing header: ${COLS.resort}`); return; }
+    // Resolve headers (case-insensitive)
+    const H = {};
+    for(const [k,v] of Object.entries(COLS)) H[k] = hdr(v);
+
+    if(!H.resort){ $("errR").textContent = `Missing header: ${COLS.resort}`; return; }
 
     const rec = rows.find(row => lower(row[H.resort]) === lower(resortQ));
-    if(!rec){ onError(`No row found for "${resortQ}".`); return; }
-
-    // --- Stoke section ---
-    const rtTD  = (rec[H.ratingTd]  || "").toString().trim();
-    const rtTMR = (rec[H.ratingTmr] || "").toString().trim();
-    const rsTD  = H.reasonTd  ? (rec[H.reasonTd]  || "").toString().trim() : "";
-    const rsTMR = H.reasonTmr ? (rec[H.reasonTmr] || "").toString().trim() : "";
-
-    $("fill-td").style.height  = Math.max(6, ratingScore(rtTD))  + "%";
-    $("fill-tmr").style.height = Math.max(6, ratingScore(rtTMR)) + "%";
-    $("cap-td").textContent  = `Today (${fmt(today)})`;
-    $("cap-tmr").textContent = `Tomorrow (${fmt(tomorrow)})`;
-    $("rt-td").textContent  = rtTD ? rtTD.charAt(0).toUpperCase()+rtTD.slice(1) : "—";
-    $("rt-tmr").textContent = rtTMR ? rtTMR.charAt(0).toUpperCase()+rtTMR.slice(1) : "—";
-    $("rs-td").textContent  = rsTD  || "";
-    $("rs-tmr").textContent = rsTMR || "";
-
-    // --- Snowfall section ---
-    const s24 = Number((H.snow24h && rec[H.snow24h]) || 0);
-    const stm = Number((H.tmrSnow && rec[H.tmrSnow]) || 0);
-    const s7d = H.last7d ? Number(rec[H.last7d] || 0) : null;
-
-    const maxVal = Math.max(6, s24, stm, s7d??0);
-    $("bar-today").style.width = snowWidth(s24, maxVal) + "%";
-    $("bar-tmr").style.width   = snowWidth(stm, maxVal) + "%";
-    $("amt-today").textContent = (isFinite(s24)? s24.toFixed(1):"0.0") + " inches";
-    $("amt-tmr").textContent   = (isFinite(stm)? stm.toFixed(1):"0.0") + " inches";
-    $("date-today").textContent = fmt(today);
-    $("date-tmr").textContent   = fmt(tomorrow);
-
-    if (s7d != null && isFinite(s7d)){
-      $("bar-7d").style.width   = snowWidth(s7d, maxVal) + "%";
-      $("amt-7d").textContent   = s7d.toFixed(1) + " inches";
-      $("date-7d").textContent  = "Last 7 days";
-      $("row-7d").style.display = "flex";
-      $("snowNote").textContent = "";
-    } else {
-      $("row-7d").style.display = "none";
-      $("snowNote").textContent = "Note: 7-day snowfall not available.";
-    }
+    if(!rec){ $("errR").textContent = `No row for "${resortQ}"`; return; }
 
     $("msg").textContent = "";
+
+    // ------- Ratings (Today / Tomorrow / Day 3) -------
+    setTower("lvl-td","rt-td","rs-td", rec[H.ratingTd], rec[H.reasonTd]);
+    setTower("lvl-tmr","rt-tmr","rs-tmr", rec[H.ratingTmr], rec[H.reasonTmr]);
+    setTower("lvl-d3","rt-d3","rs-d3", rec[H.ratingD3], rec[H.reasonD3]);
+
+    $("cap-td").textContent  = `Today`;
+    $("cap-tmr").textContent = `Tomorrow`;
+    $("cap-d3").textContent  = `Day 3`;
+
+    // ------- Snow overview -------
+    const next24 = toNum(H.next24 ? rec[H.next24] : 0);
+    const last7  = toNum(H.last7d  ? rec[H.last7d]  : 0);
+    const last24 = toNum(H.last24  ? rec[H.last24]  : 0);
+    const last72 = toNum(H.last72  ? rec[H.last72]  : 0);
+
+    const cap = Math.max(8, next24, last7);
+    setBar("bar-next24","amt-next24", next24, cap);
+    setBar("bar-last7","amt-last7", last7, cap);
+
+    $("chip-24").textContent = `Last 24h: ${last24.toFixed(1)} in`;
+    $("chip-72").textContent = `Last 72h: ${last72.toFixed(1)} in`;
+
+    // ------- 7-Day forecast (calendar days) -------
+    const sevenRoot = $("seven");
+    sevenRoot.innerHTML = "";
+
+    const forecastCols = [
+      {key:"d1", label:"D+1"},
+      {key:"d2", label:"D+2"},
+      {key:"d3", label:"D+3"},
+      {key:"d4", label:"D+4"},
+      {key:"d5", label:"D+5"},
+      {key:"d6", label:"D+6"},
+    ];
+
+    // Build list with actual labels by date
+    const items = [];
+    let offset = 1;
+    for(const f of forecastCols){
+      if(H[f.key] && rec[H[f.key]] !== undefined){
+        items.push({ inches: toNum(rec[H[f.key]]), label: dPlusLabel(offset) });
+      }
+      offset++;
+    }
+
+    if(items.length){
+      const maxStick = Math.max(6, ...items.map(i=>i.inches));
+      for(const it of items){
+        const c = document.createElement("div");
+        c.className = "dcol";
+        c.innerHTML = `
+          <div class="stick"><div class="h" style="height:${Math.min(100,(it.inches/Math.max(6,maxStick))*100)}%"></div></div>
+          <div class="dlabel">${it.label}</div>
+          <div class="dinch">${it.inches.toFixed(1)} in</div>
+        `;
+        sevenRoot.appendChild(c);
+      }
+      $("snowNote").textContent = "";
+    } else {
+      $("snowNote").textContent = "No 7-day forecast columns found (tmrsnow, 3snow, 4snow, 5snow, 6snow, 7snow).";
+    }
+
   }catch(err){
     console.error(err);
-    onError("Failed to load sheet. Ensure the link is a published CSV (output=csv) and accessible.");
+    $("errR").textContent = "Failed to load sheet. Make sure it’s published as CSV and accessible.";
   }
 }
 
