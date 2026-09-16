@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Pre-commit secret scan (safety rule 1, docs/SPEC.md #2). Installed via
+# `git config core.hooksPath .githooks`, which the "prepare" npm script sets up
+# automatically on `pnpm install`.
+set -euo pipefail
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "warning: gitleaks is not installed — skipping secret scan for this commit." >&2
+  echo "         Install it (https://github.com/gitleaks/gitleaks#installing) so this" >&2
+  echo "         check actually runs. This is a warning, not a block, so a missing" >&2
+  echo "         gitleaks binary never silently becomes 'no scanning ever happens' —" >&2
+  echo "         CI also runs gitleaks on every push as the backstop." >&2
+  exit 0
+fi
+
+gitleaks protect --staged --redact -v
