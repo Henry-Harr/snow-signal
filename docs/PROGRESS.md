@@ -6,15 +6,17 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 ## Status as of 2026-09-16
 
 **Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete. Phase 2
-(read-only protocol adapters): complete. Phase 3 (prices and watchers): complete.**
-Price collection (Chainlink + CEX + Uniswap v3 DEX, aggregation, storage), the
-governance/config watcher, the token-supply watcher, and the large-holder watcher are
-all done — Phase 4 (detectors) is next. Repo repurposed from an unrelated static
+(read-only protocol adapters): complete. Phase 3 (prices and watchers): complete.
+Phase 4 (signal detectors): complete.** All sixteen detectors (D01–D16), a
+`src/signals/util.ts` shared-math module, a two-pass registry (`src/signals/
+registry.ts`, for D14's contagion), and `docs/DETECTORS.md` are done — Phase 5 (risk
+engine, alerts, daily report) is next. Repo repurposed from an unrelated static
 ski-resort site to Sentinel per the user's explicit instruction, then built out
 through the full Phase 1 foundation in the same session. `pnpm lint`, `pnpm
-typecheck`, `pnpm test` (174 tests, unit + property), `pnpm build`, and `pnpm
-test:integration` (44 fork/live tests against real Ethereum + Base data and real
-Coinbase/Kraken APIs) all pass.
+typecheck`, `pnpm test` (295 tests, unit + property), and `pnpm build` all pass.
+`pnpm test:integration` (44 fork/live tests against real Ethereum + Base data and
+real Coinbase/Kraken APIs, unaffected by Phase 4's synthetic-data-only detectors)
+last verified green in the Phase 3 session.
 
 **Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
 `lint`, `typecheck`, `test`, `build`) — all still pass; `doctor` degrades gracefully
@@ -408,6 +410,121 @@ test:integration` 44 tests green.
 
 **Phase 3 is now complete.** Next: Phase 4 (detectors D01–D16).
 
+**New session: Phase 4 — all sixteen detectors, in one pass.** User said "do 4."
+Designed `src/signals/types.ts` first (`DetectorContext`, `Detector`, and every
+sub-shape a detector needs — `MarketContext`, `AssetContext`, `InfraChainSnapshot`,
+`AssetExposureEntry`) before writing any detector, then implemented D01–D16 plus a
+shared `util.ts` (`severityAtLeast`/`severityAtMost`, `findTimeBaseline`,
+`modifiedZScore`) and a two-pass registry. Wrote ADR 0007 up front for the two design
+questions that had to be settled before any detector code: what `DetectorContext`
+actually contains, and how D14 (contagion) gets other detectors' output as input
+without breaking `Detector`'s uniform pure-function interface.
+
+Key design decisions (see ADR 0007 for the full reasoning):
+
+- **Building a live context assembler is explicitly out of scope for this phase** —
+  spec §7 itself says detectors get "unit tests on synthetic data," so every detector
+  is tested against synthetic `DetectorContext`s (`test/unit/signals/helpers.ts`'s
+  builders) rather than wired to real storage. That wiring is Phase 5's job (the risk
+  engine is the first thing that needs a live context to run detectors on a
+  schedule). `docs/DETECTORS.md` and this note both flag this so it isn't
+  rediscovered as a surprise gap in Phase 5.
+- **Address ↔ symbol joins pushed upstream, not solved per-detector.** Protocol data
+  (`CollateralExposure.asset`, Aave's `oraclePrices`) is address-keyed; price quotes
+  and asset-family signals are symbol-keyed (`AssetContext.symbol`, matching
+  `PriceQuote.asset`). Rather than have every detector reconcile the two,
+  `AssetContext` carries already-normalized/joined data (`oraclePrice: number`,
+  `collateralAmount?: number`, `dexDepth?: DexDepthSnapshot`) that a future context
+  assembler is responsible for producing — same pattern `src/watchers/large-holders.ts`
+  already used for `collateralAmount`-style precomputed fields.
+- **D14's two-pass registry**: `DetectorContext.priorSignals` is empty on the
+  registry's first pass (every detector except D14), then populated with that pass's
+  combined output for a second pass running only D14. `evaluateAll()`
+  (`src/signals/registry.ts`) owns this orchestration; every detector's own
+  `evaluate(ctx)` stays a uniform pure function, matching spec §5.3's sketch.
+  `assetExposure: Record<symbol, {marketId, shareOfCollateralBase}[]>` is D14's join
+  table (including vault look-through), also deferred to the future assembler to
+  build.
+- **Local, self-contained types instead of importing from `src/watchers/*.ts`** —
+  `HolderSnapshot`/`BorrowerHealthSnapshot`/`TokenSupplySnapshotLike` are redeclared in
+  `signals/types.ts` rather than imported, since `large-holders.ts`/`token-supply.ts`
+  transitively import `src/chain/**` and CLAUDE.md's purity rule for `src/signals/**`
+  forbids that import path entirely, not just at runtime.
+
+Detector-specific notes worth remembering (each detector's own file header comment
+has the full formula/thresholds/false-positive writeup — this is only what's
+non-obvious from spec's one-line table):
+
+- **D06/D07** (oracle deviation / frozen oracle) both use `AssetContext.history`
+  scoped per-market (an asset's oracle price is scoped to whichever market reads it,
+  not global) — D06 requires the deviation to be _sustained_ across
+  `sustainBlocks` consecutive readings (not just the latest one) before firing; D07
+  detects "frozen" via exact floating-point equality across consecutive oracle
+  readings (valid because a stuck on-chain feed reports the literal same raw value
+  every read, so the normalized float is bit-identical, not just "close").
+- **D08** (collateral supply anomaly) escalates `danger → critical` by cross-
+  referencing the _same market_ (via `AssetContext.marketId`) for concurrent borrow
+  growth — the rsETH-pattern "paired with borrowing against the new supply" clause.
+  Explicitly cannot implement spec's "without matching known flows" exclusion (would
+  need cross-chain bridge event correlation, not collected) — documented as a known
+  gap rather than silently ignored.
+- **D09** (liquidation depth) derives a closed-form AMM formula from Uniswap v3's
+  `x=L/sqrtP`, `y=L·sqrtP` within one tick — a genuine, hand-verified derivation (see
+  the file's doc comment), but a **single-active-tick approximation**: a 5%
+  price move very plausibly crosses real tick boundaries this doesn't account for.
+  Systematically _under_-estimates true depth (the safer direction for a risk
+  detector to err in), which is worth knowing when reading an alert.
+- **D10** (peg deviation) is structurally prevented from being `standaloneCritical`
+  (hardcoded `false`, not just defaulted) per ADR 0005 — a depeg alert must never
+  itself trigger an automatic exit.
+- **D12/D13** split MetaMorpho vault governance events by subset: D12 owns role/
+  timelock/fee events, D13 owns the allocation-queue events (`SetSupplyQueue`,
+  `SetCap`, `ReallocateSupply`, …) from the _same_ underlying event stream
+  (`src/watchers/governance.ts` doesn't itself distinguish the two). D12's cap-jump
+  severity is computed from the event's own `oldCap`/`newCap` args (real magnitude,
+  not a fixed guess) — removing a cap entirely is always `danger` regardless of
+  magnitude; _lowering_ or newly adding a cap never fires (protective changes).
+- **D13**'s "new market" detection has **no cross-run state** in this phase — it
+  can't yet distinguish a market newly added to a vault's queue from one that's
+  always been there and just got reallocated into again; every allocation event
+  fires `watch` unconditionally. True diffing needs the previous evaluation's queue,
+  a Phase 5/6 concern once the pipeline runs repeatedly. Escalation to `danger` only
+  works when the referenced market is also one `DetectorContext.markets` covers
+  directly (checked via the same `priorSignals` mechanism D14 uses).
+- **D15** (debt near liquidation) has a real, documented limitation: Aave's
+  `healthFactor` is account-wide (across every reserve a borrower uses), not
+  per-reserve — so "share of pool debt" is actually computed as "share of the
+  _tracked_ large-borrower population's account-wide debt," not literally this
+  market's own debt. Internally consistent (same units both sides of the ratio) but
+  not the exact measurement spec's wording describes; stated plainly in the doc
+  comment rather than glossed over.
+- **D16** (infra health) is capped at `watch`/`danger` only — never `critical`, never
+  `standaloneCritical` — matching spec's exact wording and spec §8.1's "infra alone
+  never causes an exit" rule.
+
+Tests: 16 detector test files (~120 new tests) plus `registry.test.ts` (7 tests,
+including an end-to-end run of the real `defaultDetectors()` registry and a direct
+check that D14 receives exactly the first pass's signals via `priorSignals` and runs
+exactly once). Every detector's test file covers normal/borderline/alarming/false-
+positive cases per spec §7's own requirement. Two real floating-point test bugs
+caught and fixed along the way (D02's exact-threshold test hit IEEE-754 subtraction
+imprecision, `0.7 - 0.6 !== 0.1`; fixed by testing comfortably past the threshold
+instead of exactly at it, with the reasoning documented in the test). `pnpm lint`/
+`typecheck`/`test` (295 tests)/`format:check`/`build` all green.
+
+`docs/DETECTORS.md` written: the spec-table index, shared building blocks, the
+standalone-critical/alert-only detector list, D14's two-pass design, and a
+"known cross-cutting limitations" section collecting the address/symbol-join,
+D13-no-state, D15-account-wide, and D09-single-tick gaps in one place instead of
+scattered per-detector.
+
+**Phase 4 is now complete.** Next: Phase 5 (risk engine, alerts, daily report — the
+first version the user actually runs). Phase 5 must build the live context assembler
+this phase deliberately deferred (see ADR 0007's consequences section for the
+specific gaps: oracle-price/quote joining by symbol, `DexDepthSnapshot` from live
+Uniswap v3 `liquidity()`/`slot0()` reads — not currently fetched by the Phase 3 price
+source — and `assetExposure` vault look-through resolution).
+
 ### What's done
 
 - Old repo content (`index.html`, `resort.html`, `CNAME`, `.gitattributes` — a ski
@@ -762,12 +879,22 @@ queryable. — **Met. Phase 3 complete.**
 
 ### Phase 4 — Detectors
 
-- [ ] D01–D16 (spec §7 table), each: own file, doc comment (purpose/inputs/formula/
+- [x] D01–D16 (spec §7 table), each: own file, doc comment (purpose/inputs/formula/
       thresholds/false-positive sources), unit tests (normal/borderline/alarming +
-      ≥1 known false-positive case), entry in `docs/DETECTORS.md`.
-- [ ] Detector registry.
+      ≥1 known false-positive case), entry in `docs/DETECTORS.md`. — **DONE
+      2026-09-16**: `src/signals/D01_*.ts` … `D16_*.ts` + `src/signals/util.ts`
+      (shared threshold/z-score helpers) + `src/signals/types.ts`
+      (`DetectorContext` and every sub-shape). See the session note above for the
+      cross-detector design decisions (address/symbol joins pushed to a future
+      context assembler, D14's two-pass registry) and per-detector limitations
+      worth remembering (D09 single-tick approximation, D13 no cross-run state,
+      D15 account-wide health factor).
+- [x] Detector registry. — **DONE 2026-09-16**: `src/signals/registry.ts`
+      (`defaultDetectors()` + `evaluateAll()`, the latter implementing D14's
+      two-pass orchestration per ADR 0007).
 
-**Done when:** every detector has the three test cases plus a false-positive case.
+**Done when:** every detector has the three test cases plus a false-positive case. —
+**Met. Phase 4 complete.**
 
 ### Phase 5 — Risk engine, alerts, daily report (watch-only MVP)
 
