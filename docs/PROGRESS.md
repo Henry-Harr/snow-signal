@@ -6,12 +6,13 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 ## Status as of 2026-09-16
 
 **Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete. Phase 2
-(read-only protocol adapters): in progress — Aave v3 and Morpho Blue adapters done,
-Morpho vault adapter not started.** Repo repurposed from an unrelated static
-ski-resort site to Sentinel per the user's explicit instruction, then built out
-through the full Phase 1 foundation in the same session. `pnpm lint`, `pnpm
-typecheck`, `pnpm test` (73 tests, unit + property), `pnpm build`, and
-`pnpm test:integration` (16 fork tests against real Ethereum + Base data) all pass.
+(read-only protocol adapters): complete** — all three adapters (Aave v3, Morpho Blue,
+Morpho vault) implemented and fork-tested against real chain data. Phase 3 (prices and
+watchers) is next. Repo repurposed from an unrelated static ski-resort site to
+Sentinel per the user's explicit instruction, then built out through the full Phase 1
+foundation in the same session. `pnpm lint`, `pnpm typecheck`, `pnpm test` (88 tests,
+unit + property), `pnpm build`, and `pnpm test:integration` (21 fork tests against
+real Ethereum + Base data) all pass.
 
 **Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
 `lint`, `typecheck`, `test`, `build`) — all still pass; `doctor` degrades gracefully
@@ -131,6 +132,70 @@ Base state — including a real position discovery test against the user's own w
 vault (Gauntlet USDC Prime) in a real market it allocates into (USDC/wstETH, found via
 a live query against the vault's on-chain allocation, not guessed). All pass.
 `pnpm lint`/`typecheck`/`test` (73 tests)/`format:check`/`build` all still green.
+
+**Same session, continued — Morpho vault adapter (the last Phase 2 piece):**
+`src/protocols/morpho-vault/{abi,adapter}.ts`, plus a small refactor pulling the
+Morpho Blue market/position zod schemas and virtual-shares math into shared
+`src/protocols/morpho-blue/{types,shares-math}.ts` files so the vault adapter (which
+reads the same Morpho Blue structs for every market it allocates into) doesn't
+duplicate them.
+
+Before writing any code, **confirmed on-chain — not just from docs — that the user's
+watched vault (Gauntlet USDC Prime) is MetaMorpho v1.1, not Vault V2**: called
+`isMetaMorpho()` on the vault's deploying factory directly via `cast call` against the
+live Base RPC (returned `true`), and `isVaultV2()` on the same factory (reverted — that
+function doesn't exist on a v1.1 factory). This resolves the "still need to confirm
+on-chain" flag both this session's own earlier notes and an ADR left open. The adapter
+implements v1.1 only, with that limitation documented in `abi.ts`'s header comment —
+correct scope for what's actually watched, not scope creep into Vault V2 support
+nothing needs yet.
+
+Implements: `MORPHO()`/roles/timelock/pending-changes reads, the supply and withdraw
+queues (dynamic-length, read via a `Promise.all`-free two-stage multicall — lengths
+first, then the queue entries), `config(id)` per market (cap/enabled/removableAt),
+each allocated market's full Morpho Blue state and the vault's own position in it
+(reusing `morphoBlueAbi` directly — a vault's risk _is_ its underlying markets' risk),
+idle-asset balance, **vault withdrawable liquidity** (idle + for each withdraw-queue
+market, the smaller of the vault's supply there and that market's available liquidity
+— spec §6.4's exact definition), **look-through exposure** (the vault's real supply
+position in each market, grouped by that market's collateral asset — `method: 'exact'`,
+since unlike Aave's pool-wide approximation this reads the vault's actual allocation),
+`discoverPositions` (share balance → `convertToAssets`), `withdrawable` (delegates
+straight to the vault's own `maxWithdraw()` rather than re-deriving it — that's already
+the ERC-4626-correct answer), `buildWithdraw`, and `decodeEvents`.
+
+Two vault-specific fields needed a documented reinterpretation rather than a literal
+copy of Aave's shape, since "borrow/utilization" doesn't apply to a vault the way it
+does to a lending pool:
+
+- `totalBorrowed` is always `0n` — a vault doesn't borrow; the borrowing happens in the
+  underlying markets, which `collateralExposure` covers.
+- `utilization` is redefined as the share of vault assets that is _not_ immediately
+  withdrawable (locked in underlying-market illiquidity), the closest meaningful
+  analogue for a vault.
+- `supplyRate`/`borrowRate` are left at `0` rather than computed — an accurate vault
+  APY needs every allocated market's IRM rate weighted by allocation and netted
+  against both that market's and the vault's own fee; deferred as real future work
+  (Phase 3 can measure _realized_ yield from `totalAssets` deltas over time instead,
+  which is more honest than a per-block theoretical estimate) rather than fabricated
+  now to fill the field.
+
+15 unit tests (mocked `ContractReadClient`, including a two-market fixture exercising
+the supply-queue/withdraw-queue union and a market present in one queue but not the
+other) plus 5 fork integration tests against the user's **real** watched vault on Base
+— including a direct-read cross-check of a real allocated market's cap, and confirming
+`totalSupplied` matches a direct `totalAssets()` call against real chain state
+(vault held ~$10.7M in USDC on Base as of the pinned block, 2 markets in its supply
+queue, 6 in its withdraw queue). All pass. One test assertion had to be loosened after
+a real finding: a market can legitimately sit in the withdraw queue with zero current
+allocation (previously funded, now empty) — the adapter already handled this correctly
+(a `0` exposure share), the first version of the test's "every share must be positive"
+assertion was just wrong.
+
+**Phase 2 is now complete**: all three protocol adapters (Aave v3, Morpho Blue, Morpho
+vault) implemented and fork-tested against real chain data. Final tally:
+`pnpm lint`/`typecheck`/`build` clean, `pnpm test` 88 unit/property tests passing,
+`pnpm test:integration` 21 fork tests passing across Ethereum and Base.
 
 ### What's done
 
@@ -391,7 +456,7 @@ than pinning `24` specifically, since this sandbox runs Node 22 (Maintenance LTS
 `>=22` keeps local dev working while CI's `actions/setup-node` still targets Node 24
 (Active LTS) for the versions that actually run in CI.
 
-### Phase 2 — Read-only protocol adapters
+### Phase 2 — Read-only protocol adapters — **DONE 2026-09-16**
 
 - [x] Re-verify Morpho oracle scaling and MetaMorpho v1.1 event names directly against
       `docs.morpho.org` (blocked this session) before writing detector-facing math. —
@@ -426,17 +491,24 @@ than pinning `24` specifically, since this sandbox runs Node 22 (Maintenance LTS
       2026-09-16**: `src/protocols/morpho-blue/{abi,addresses,adapter}.ts`, 15 unit
       tests, 6 fork integration tests (Base, against a real market and the user's own
       watched vault's real position in it) all passing. See the session note above.
-- [ ] Morpho vault adapter: ERC-4626 state incl. `maxWithdraw`/`maxRedeem`, allocation
+- [x] Morpho vault adapter: ERC-4626 state incl. `maxWithdraw`/`maxRedeem`, allocation
       (supply/withdraw queues + caps), roles, timelock + pending changes, event
       decoding; look-through exposure; vault withdrawable liquidity. Branch for Vault
-      V2 shape if a watched vault uses it.
+      V2 shape if a watched vault uses it. — **DONE 2026-09-16**:
+      `src/protocols/morpho-vault/{abi,adapter}.ts`. Confirmed **on-chain** (not
+      assumed) that the watched vault is MetaMorpho v1.1 via `isMetaMorpho()`/
+      `isVaultV2()` on its deploying factory — no Vault V2 branch built, since nothing
+      watched needs one; documented as a known limitation if that ever changes. 15
+      unit tests, 5 fork integration tests against the real watched vault on Base, all
+      passing. See the session note above for the vault-specific field
+      reinterpretations (`totalBorrowed`/`utilization`/rates).
 - [x] Fork integration tests (Ethereum + Base, pinned blocks) asserting adapter reads
-      match direct contract calls. — **DONE for Aave v3 (both chains) and Morpho Blue
-      (Base) 2026-09-16**; still needed for the Morpho vault adapter once it exists.
+      match direct contract calls. — **DONE for all three adapters 2026-09-16**: Aave
+      v3 (Ethereum + Base), Morpho Blue (Base), Morpho vault (Base) — 21 fork tests
+      total, all passing against real chain data.
 
 **Done when:** fork integration tests on Ethereum and Base match direct contract reads
-at pinned blocks. — **Met for Aave v3.** Not yet met for Morpho Blue/vault adapters,
-which don't exist yet — phase isn't complete until those do too.
+at pinned blocks. — **Met. Phase 2 complete.**
 
 ### Phase 3 — Prices and watchers
 

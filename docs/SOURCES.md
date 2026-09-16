@@ -125,6 +125,35 @@ morpho-blue/main/...` — recorded in `src/protocols/morpho-blue/abi.ts`.
   reads will differ structurally from v1.1's `supplyQueue`/`withdrawQueue`/curator
   model — confirm which standard a given watched vault uses on-chain (its bytecode /
   factory) before assuming v1.1 shape.
+- **Watched vault's shape, confirmed on-chain (2026-09-16)**: the user's watched vault
+  (Gauntlet USDC Prime, `0xeE8F4eC5672F09119b96Ab6fB59C27E1b7e44b61` on Base) was
+  deployed by factory `0xA9c3D3a366466Fa809d1Ae982Fb2c46E5fC41101`. Called
+  `isMetaMorpho(vault)` on that factory directly via `cast call` against the live Base
+  RPC: returned `true`. Called `isVaultV2(vault)` on the same factory: reverted (that
+  function doesn't exist on a v1.1 factory — confirmed via `IVaultV2Factory.sol`'s
+  interface, which only a _different_ factory contract would implement). **This is a
+  MetaMorpho v1.1 vault, not Vault V2** — `src/protocols/morpho-vault/adapter.ts`
+  implements v1.1 only; it will misread a Vault V2 vault if one is ever added to
+  watched positions (needs a separate adapter, per spec §6.4). The same factory
+  address (`0xA9c3D3a366466Fa809d1Ae982Fb2c46E5fC41101`) also deployed at least one
+  Ethereum vault (Steakhouse USDT, found via `api.morpho.org/graphql`), alongside an
+  older, different factory address (`0x1897A8997241C1cD4bD0698647e4EB7213535c24`,
+  likely a pre-v1.1 MetaMorpho factory) — so factory address alone doesn't prove v1.1;
+  the `isMetaMorpho()`/`isVaultV2()` check against a vault's _actual_ deploying
+  factory is what's authoritative, not "which factory address looks familiar."
+- **Full `IMetaMorpho` read interface, re-verified directly (2026-09-16)** against
+  `raw.githubusercontent.com/morpho-org/metamorpho/main/src/interfaces/IMetaMorpho.sol`
+  and `.../src/libraries/PendingLib.sol`: `MORPHO()`, `owner()`, `curator()`,
+  `guardian()`, `isAllocator(address)`, `fee()` (`uint96`), `feeRecipient()`,
+  `timelock()`, `pendingTimelock()`/`pendingGuardian()`/`pendingCap(Id)` (each a
+  `{value, validAt}` pending-change struct), `supplyQueueLength()`/`supplyQueue(uint256)`,
+  `withdrawQueueLength()`/`withdrawQueue(uint256)`, `config(Id)` (returns
+  `MarketConfig{cap: uint184, enabled: bool, removableAt: uint64}`),
+  `lastTotalAssets()`. Standard ERC-4626 reads (`totalAssets`, `maxWithdraw`,
+  `maxRedeem`, `convertToAssets`, `asset`) and `withdraw(assets, receiver, owner)` come
+  from viem's own maintained `erc4626Abi`, cross-checked against MetaMorpho's own
+  `withdraw` signature in the same interface file (identical). Recorded in
+  `src/protocols/morpho-vault/abi.ts`.
 - Supply queue / withdraw queue / timelock behavior (v1.1): supply queue empty ⇒
   deposits revert; Allocator can reorder supply queue without timelock; cap _increases_
   are timelocked (24h–2w per curator config), cap _decreases_ and queue removals (when

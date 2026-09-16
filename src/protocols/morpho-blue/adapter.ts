@@ -3,6 +3,15 @@ import { z } from 'zod';
 
 import { morphoBlueAbi, morphoIrmAbi, morphoOracleAbi } from './abi.js';
 import { resolveMorphoBlueAddress } from './addresses.js';
+import { toAssetsDown, toSharesUp } from './shares-math.js';
+import {
+  bytes32Schema,
+  marketParamsSchema,
+  marketSchema,
+  positionSchema,
+  type MarketData,
+  type MarketParamsData,
+} from './types.js';
 import type { ContractCall, ContractCallResult, ContractReadClient } from '../../chain/client.js';
 import type { RpcPool } from '../../chain/rpc-pool.js';
 import { AdapterError } from '../../core/errors.js';
@@ -28,70 +37,6 @@ function unwrap(result: ContractCallResult | undefined, context: string): unknow
   if (!result) throw new AdapterError(`${context}: missing multicall result`);
   if (result.status === 'failure') throw new AdapterError(`${context}: ${result.error.message}`);
   return result.result;
-}
-
-function addressSchema() {
-  return z.string().regex(/^0x[a-fA-F0-9]{40}$/) as unknown as z.ZodType<Address>;
-}
-
-function bytes32Schema() {
-  return z.string().regex(/^0x[a-fA-F0-9]{64}$/) as unknown as z.ZodType<`0x${string}`>;
-}
-
-const nonNegativeBigint = z.bigint().nonnegative();
-
-/** `Market` struct field order (src/interfaces/IMorpho.sol, verified 2026-09-16). */
-const marketSchema = z.object({
-  totalSupplyAssets: nonNegativeBigint,
-  totalSupplyShares: nonNegativeBigint,
-  totalBorrowAssets: nonNegativeBigint,
-  totalBorrowShares: nonNegativeBigint,
-  lastUpdate: nonNegativeBigint,
-  fee: nonNegativeBigint,
-});
-type MarketData = z.infer<typeof marketSchema>;
-
-/** `MarketParams` struct field order, same source. */
-const marketParamsSchema = z.object({
-  loanToken: addressSchema(),
-  collateralToken: addressSchema(),
-  oracle: addressSchema(),
-  irm: addressSchema(),
-  lltv: nonNegativeBigint,
-});
-type MarketParamsData = z.infer<typeof marketParamsSchema>;
-
-// Unlike `market`/`idToMarketParams` (each a single named struct return, which viem
-// decodes to a plain object), `position` is declared in the ABI as three separate
-// top-level named outputs (matching the multi-output pattern in
-// src/protocols/aave-v3/abi.ts) — viem decodes that shape as a positional tuple, not
-// an object, confirmed directly against a real fork call (2026-09-16). Same
-// ABI-encoded bytes either way (all fields are static-size), just a different
-// decoded JS shape depending on how the ABI groups the outputs.
-const positionSchema = z.tuple([nonNegativeBigint, nonNegativeBigint, nonNegativeBigint]);
-
-/** Morpho's virtual-shares offset (`SharesMathLib.sol`, verified 2026-09-16) — added
- * to both sides of every shares<->assets conversion to make an empty market's first
- * deposit share-inflation-attack-resistant. `VIRTUAL_SHARES = 1e6`,
- * `VIRTUAL_ASSETS = 1`. */
-const VIRTUAL_SHARES = 1_000_000n;
-const VIRTUAL_ASSETS = 1n;
-
-/** `shares.mulDivDown(totalAssets + VIRTUAL_ASSETS, totalShares + VIRTUAL_SHARES)` —
- * BigInt division already floors for non-negative operands, matching `mulDivDown`. */
-function toAssetsDown(shares: bigint, totalAssets: bigint, totalShares: bigint): bigint {
-  return (shares * (totalAssets + VIRTUAL_ASSETS)) / (totalShares + VIRTUAL_SHARES);
-}
-
-/** `assets.mulDivUp(totalShares + VIRTUAL_SHARES, totalAssets + VIRTUAL_ASSETS)` —
- * ceiling division via the standard `(a + b - 1) / b` BigInt trick. Used only to
- * estimate a "withdraw everything" share count for `buildWithdraw` (see its comment)
- * — rounding up here means the estimate very slightly over-, never under-, requests,
- * which `withdraw()` will simply clamp to the caller's actual share balance. */
-function toSharesUp(assets: bigint, totalAssets: bigint, totalShares: bigint): bigint {
-  const numerator = assets * (totalShares + VIRTUAL_SHARES);
-  const denominator = totalAssets + VIRTUAL_ASSETS;
-  return (numerator + denominator - 1n) / denominator;
 }
 
 const SECONDS_PER_YEAR = 365n * 24n * 60n * 60n;
