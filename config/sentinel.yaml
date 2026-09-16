@@ -1,0 +1,65 @@
+# Sentinel configuration. See config/sentinel.example.yaml for field docs and
+# docs/SOURCES.md for where the addresses below came from.
+
+safe:
+  address: '0x04E779d093549Da687C51ea0c2Ae8AE2174e3465'
+
+chains:
+  ethereum:
+    chainId: 1
+    confirmations: 2 # placeholder — see docs/SPEC.md #14, tune via replay (safety rule 8)
+    rpc:
+      - { name: primary, url: '${ETH_RPC_PRIMARY}' }
+      - { name: secondary, url: '${ETH_RPC_SECONDARY}' }
+  base:
+    chainId: 8453
+    confirmations: 5 # placeholder
+    rpc:
+      - { name: primary, url: '${BASE_RPC_PRIMARY}' }
+      - { name: secondary, url: '${BASE_RPC_SECONDARY}' }
+
+# Picked by the assistant per the user's "you pick" (2026-09-16) — largest, most
+# liquid option on each protocol/chain as a sensible default watch list, not a
+# recommendation on where to actually hold funds. Addresses verified directly against
+# official sources this session, not from memory (safety rule 6) — see docs/SOURCES.md.
+positions:
+  - { protocol: aave-v3, chain: ethereum, market: core, asset: USDC } # Aave v3.7 Core, Pool 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2
+  - { protocol: aave-v3, chain: base, market: core, asset: USDC } # Aave v3.7, Pool 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5
+  - { protocol: morpho-vault, chain: base, vault: '0xeE8F4eC5672F09119b96Ab6fB59C27E1b7e44b61' } # Gauntlet USDC Prime (gtUSDCp), largest Base vault by TVL at pick time
+
+# All thresholds below are placeholders (docs/SPEC.md #7). They change only with
+# replay-harness evidence recorded in docs/TUNING_LOG.md (safety rule 8) — never edit
+# these from a single day's alerts.
+detectors:
+  D01_utilization: { watch: 0.9, danger: 0.95, critical: 0.99 }
+  D02_utilization_velocity: { dangerPointsPerHour: 10 }
+  D03_exit_coverage: { watch: 20, danger: 5, critical: 1.5 }
+  D04_abnormal_outflows: { watchZ: 4, dangerZ: 8 }
+  D05_large_holder_exit: { watchShareWithdrawn: 0.25, windowHours: 1 }
+  D06_oracle_market_deviation: { watch: 0.02, danger: 0.05, critical: 0.1 }
+  D07_frozen_oracle: { dangerMarketMove: 0.03, criticalMarketMove: 0.1 }
+  D08_collateral_supply_anomaly: { dangerSupplyRise: 0.05, windowHours: 1 }
+  D09_liquidation_depth: { maxSlippage: 0.05 }
+  D10_peg: { watch: 0.005, danger: 0.02, critical: 0.05 }
+  D11_bad_debt: { criticalAmountUsd: 100000 }
+  D12_governance_change: { severity: watch }
+  D13_vault_allocation_drift: { watchOnNewMarket: true }
+  D14_contagion: { severityStepDown: 1, exposureShareOverride: 0.2 }
+  D15_borrowers_near_liquidation: { watchShareOfDebt: 0.2, healthFactorBelow: 1.05 }
+  D16_infra_health: { lagSecondsWatch: 30, lagSecondsDanger: 120 }
+
+policy:
+  danger: { action: partial_withdraw, fraction: 0.5 }
+  critical: { action: full_exit }
+  maxShareOfAvailableLiquidity: 0.05
+
+execution:
+  mode: off # off | paper | live — only you ever set live, after Phase 8 (docs/SPEC.md #8.4)
+  maxPriorityFeeGwei: { ethereum: 50, base: 1 } # placeholders
+
+notify:
+  telegram: { tokenEnv: TELEGRAM_BOT_TOKEN, allowedChatIds: [] } # no bot yet — see docs/PROGRESS.md
+
+reports:
+  dailyUtcHour: 0
+  benchmark: { kind: pool_base_rate }

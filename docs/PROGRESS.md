@@ -23,6 +23,17 @@ blocked** on the open questions below (specifically 1: RPC URLs, and 5: which ma
 vaults to watch) — wrote no adapter code this session to avoid guessing at a specific
 Aave version or Morpho vault shape before knowing the actual target.
 
+**Same session, continued:** user answered questions 1, 2, and 5 (RPC URLs, Safe
+address, "you pick" for markets/vaults). Wrote `.env` (git-ignored, real Alchemy/Ankr
+URLs for Ethereum + Base) and `config/sentinel.yaml` (real Safe address; Aave v3 Core
+USDC on Ethereum + Base, Gauntlet USDC Prime vault on Base — addresses pulled directly
+from the Aave address-book repo and Morpho's GraphQL API this session, not memory).
+`sentinel doctor` now reports config/both chains'/database all `[✓]`, notifier `[!]`
+(no Telegram token yet, as expected). Full check suite (`lint`/`typecheck`/`test`) still
+green. Remaining open items: Telegram bot (question 3) and confirming local Foundry/
+Docker tooling (question 4) — see the open-questions section below for current status
+on each.
+
 ### What's done
 
 - Old repo content (`index.html`, `resort.html`, `CNAME`, `.gitattributes` — a ski
@@ -106,27 +117,37 @@ test`, `pnpm format:check`, and `pnpm build` all pass; the built CLI was smoke-
 - Node.js: Active LTS is Node 24 as of 2026-09-15 (Node 22 = Maintenance LTS, Node 26 =
   Current, becomes LTS Oct 2026). Use Node 24 for `engines` and CI.
 
-### Open questions for the user (spec §15 — using mocks/placeholders until answered)
+### Open questions for the user (spec §15) — status as of 2026-09-16
 
-1. RPC URLs for Ethereum and Base, two independent providers each, at least one with
-   archive access for replays.
-2. Public addresses to watch, including the user's Safe address (public only, never a
-   key).
-3. Telegram bot token and allowlisted chat ID(s).
-4. Confirm local tooling: Node.js (LTS, ideally 24), pnpm, Foundry (anvil/cast), Docker
-   — a Phase 1 `sentinel doctor`-adjacent check will report what's missing, but if the
-   user already knows something is absent it saves a round-trip to say so now.
-5. Which specific markets/vaults are the actual target positions? (Needed to know,
-   concretely, e.g. whether a watched Aave position is on a v3 or v4 market once that's
-   verified, and whether a watched Morpho vault is v1.1 or V2 shaped.) Using the spec's
-   example config shape (Aave v3 core USDC on Ethereum, a Morpho vault on Base) as a
-   placeholder until told otherwise.
+1. **Answered.** RPC URLs: Alchemy + Ankr for both Ethereum and Base, in local `.env`
+   (git-ignored, never committed). No dedicated archive endpoint was given, so
+   `ETH_RPC_ARCHIVE`/`BASE_RPC_ARCHIVE` currently just reuse the Alchemy URLs — Alchemy
+   serves historical state on all tiers, but revisit if Phase 6 replay work hits a
+   depth limit on this key.
+2. **Answered.** Safe address: `0x04E779d093549Da687C51ea0c2Ae8AE2174e3465`, now in
+   `config/sentinel.yaml` (public info, fine to commit).
+3. **Still open.** User has no Telegram bot yet. Left `TELEGRAM_BOT_TOKEN` unset;
+   `sentinel doctor` correctly reports the notifier as a warning, not a failure.
+   Blocks real alert delivery from Phase 5 onward — console/log output still works
+   without it. Revisit when the user sets one up (BotFather).
+4. **Still open**, not asked again this round — Foundry/anvil in particular will be
+   needed before Phase 2's fork integration tests or any Phase 7+ work.
+5. **Answered** ("you pick" — user, 2026-09-16). Picked by liquidity/TVL at pick time,
+   verified against official sources (address book repo, Morpho's GraphQL API), not
+   from memory — see `docs/SOURCES.md` for exact addresses and how each was found:
+   - Aave v3 Ethereum Core, USDC (confirmed v3.7 Core deployment, not the concurrent
+     v4 hub — see the Aave version note above).
+   - Aave v3 Base, USDC (v3.7, only Aave version live on Base).
+   - Morpho vault: Gauntlet USDC Prime (`gtUSDCp`) on Base, largest Base vault by TVL
+     — still need to confirm on-chain it's v1.1-shaped, not Vault V2, before the vault
+     adapter assumes a queue/role structure.
+   These are a sensible default watch list, not a claim about where the user actually
+   holds funds — replace in `config/sentinel.yaml` any time by editing `positions:`.
 
-None of these block Phase 1 (foundations don't need real RPCs or a real Safe address
-yet — config schema + mocks suffice), but they will block meaningful Phase 2 testing
-(fork integration tests need at least one archive-capable RPC) and everything from
-Phase 5 onward (real alerts need a real Telegram token; the exit drill needs a real
-Safe address to check `discoverPositions` against, even in `off` mode).
+Item 3 (no Telegram bot) and item 4 (local tooling unconfirmed) are the only remaining
+gaps. Item 3 blocks real alert delivery (Phase 5+) but nothing before that. Item 4
+should be confirmed before Phase 2's fork integration tests are actually run (vs. just
+written) or before Phase 7+ needs a local Anvil fork.
 
 ### Safety hook added (Phase 1, safety rule 3)
 

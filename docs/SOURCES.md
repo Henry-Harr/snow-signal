@@ -29,6 +29,15 @@ maintained package at actual implementation time rather than copied from here.
     2026-09-15) that an `AaveV3Base` module exists with a `POOL` address — i.e. Base is
     covered. Re-fetch at implementation time; do not copy the address into code from
     this doc.
+- **Watched-market Pool addresses, verified directly (2026-09-16)** by fetching
+  `raw.githubusercontent.com/aave-dao/aave-address-book/main/src/AaveV3{Ethereum,Base}.sol`:
+  Ethereum Core `POOL = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2`,
+  `AAVE_PROTOCOL_DATA_PROVIDER = 0x0a16f2FCC0D44FaE41cc54e079281D84A363bECD`; Base
+  `POOL = 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5`,
+  `AAVE_PROTOCOL_DATA_PROVIDER = 0x0F43731EB8d45A581f4a36DD74F5f358bc90C73A`. Recorded
+  here for traceability; adapter code should still resolve these from the
+  `@aave-dao/aave-address-book` npm package at runtime rather than a hardcoded literal,
+  per this file's own header rule.
 - Bad debt / reserve deficit accounting: introduced in **Aave v3.3** (`eliminateDeficit()`,
   `getReserveDeficit()` on the data provider, permissioned `eliminateReserveDeficit()` on
   Pool). Source: https://github.com/aave-dao/aave-v3-origin/blob/main/docs/3.3/Aave-v3.3-features.md
@@ -77,6 +86,17 @@ maintained package at actual implementation time rather than copied from here.
   which 404'd for the specific path tried). **Open item for Phase 2**: pull addresses
   from Morpho's official TS SDK / deployments package rather than hardcoding, if one
   exists (`@morpho-org/blue-sdk` mentioned in search results — verify).
+
+## Watched Morpho vault pick
+
+- User asked the assistant to pick the watched vault(s) (2026-09-16). Queried
+  `api.morpho.org/graphql` directly (`vaults` query, `chainId_in: [8453]`, ordered by
+  `totalAssetsUsd` desc) and picked the largest by TVL at pick time: **Gauntlet USDC
+  Prime** (`gtUSDCp`) on Base, `0xeE8F4eC5672F09119b96Ab6fB59C27E1b7e44b61`, ~$421.7M
+  TVL. This is a default-by-liquidity choice, not a recommendation — revisit if the
+  user names a specific vault they actually hold. Still need to confirm on-chain
+  whether it's MetaMorpho v1.1 or Vault V2 shaped before Phase 2 vault-adapter code
+  assumes a queue/role structure (see the Vault V2 caveat below).
 
 ## Morpho Vaults (MetaMorpho v1.1, Vault V2)
 
