@@ -19,8 +19,10 @@ import { openDatabase } from '../storage/db.js';
 import { DecisionRecordRepository } from '../storage/decision-record-repository.js';
 import { GlobalControlsRepository } from '../storage/global-controls-repository.js';
 import { MarketSnapshotRepository } from '../storage/market-snapshot-repository.js';
+import { PaperExecutionRepository } from '../storage/paper-execution-repository.js';
 import { ProtocolEventRepository } from '../storage/protocol-event-repository.js';
 import { RiskStateRepository } from '../storage/risk-state-repository.js';
+import { WithdrawalCampaignRepository } from '../storage/withdrawal-campaign-repository.js';
 
 /**
  * `sentinel watch` (docs/SPEC.md §11, docs/PROGRESS.md Phase 5 "done when": runs
@@ -66,6 +68,14 @@ export async function runWatch(options: WatchOptions): Promise<void> {
     protocolEvents: new ProtocolEventRepository(db),
     decisionRecords: new DecisionRecordRepository(db),
     riskState: new RiskStateRepository(db),
+    // Only wired when paper mode is actually configured — see `PipelineDeps.repos`'s
+    // doc comment (`src/core/pipeline.ts`) for why these two are optional.
+    ...(config.execution.mode === 'paper'
+      ? {
+          campaigns: new WithdrawalCampaignRepository(db),
+          paperExecutions: new PaperExecutionRepository(db),
+        }
+      : {}),
   };
   const globalControls = new GlobalControlsRepository(db);
 

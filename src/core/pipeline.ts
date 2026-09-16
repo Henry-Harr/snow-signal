@@ -1,3 +1,4 @@
+import { runPaperExecution, type PaperExecutorPosition } from '../actions/paper-executor.js';
 import { normalizeAaveOraclePrice, buildAssetExposure } from '../risk/context.js';
 import { decide } from '../risk/state-machine.js';
 import { initialPositionRiskState, type PositionRiskState } from '../risk/types.js';
@@ -37,8 +38,10 @@ import type { ContractReadClient } from '../chain/client.js';
 import type { RpcPool } from '../chain/rpc-pool.js';
 import type { DecisionRecordRepository } from '../storage/decision-record-repository.js';
 import type { MarketSnapshotRepository } from '../storage/market-snapshot-repository.js';
+import type { PaperExecutionRepository } from '../storage/paper-execution-repository.js';
 import type { ProtocolEventRepository } from '../storage/protocol-event-repository.js';
 import type { RiskStateRepository } from '../storage/risk-state-repository.js';
+import type { WithdrawalCampaignRepository } from '../storage/withdrawal-campaign-repository.js';
 
 /**
  * The live pipeline (docs/ARCHITECTURE.md #1: "a single `runOnce(blockRef)` pipeline
@@ -80,6 +83,14 @@ export interface PipelineDeps {
     protocolEvents: ProtocolEventRepository;
     decisionRecords: DecisionRecordRepository;
     riskState: RiskStateRepository;
+    /** Phase 7 paper executor state — absent for callers that never run paper mode
+     * (e.g. the replay engine, which only ever exercises `execution.mode: 'off'`
+     * scenarios and would never want to spawn real Anvil forks mid-replay). When
+     * both are present and `config.execution.mode === 'paper'`, a DANGER/CRITICAL
+     * decision's `partial_withdraw`/`full_exit` action recommendation triggers
+     * `runPaperExecution` (`src/actions/paper-executor.ts`). */
+    campaigns?: WithdrawalCampaignRepository;
+    paperExecutions?: PaperExecutionRepository;
   };
   killSwitchActive: boolean;
   dwellSeconds: number;
@@ -458,5 +469,52 @@ export async function runOnce(deps: PipelineDeps, at: BlockRef): Promise<void> {
       !!(state.manualControls.mutedUntil && state.manualControls.mutedUntil > deps.clock.now()),
       state.manualControls.ackedDecisionId === String(decisionId),
     );
+
+    const actionKind = result.decision.action.kind;
+    if (
+      deps.config.execution.mode === 'paper' &&
+      deps.repos.campaigns &&
+      deps.repos.paperExecutions &&
+      (actionKind === 'partial_withdraw' || actionKind === 'full_exit')
+    ) {
+      const paperPosition: PaperExecutorPosition = {
+        positionId: position.positionId,
+        protocol: position.protocol,
+        marketId: position.marketId,
+        assetSymbol: position.assetSymbol,
+      };
+      try {
+        const outcome = await runPaperExecution({
+          chain: deps.chain,
+          chainId: deps.chainId,
+          config: deps.config,
+          clock: deps.clock,
+          ...(deps.logger ? { logger: deps.logger } : {}),
+          campaigns: deps.repos.campaigns,
+          forkUrl: deps.config.chains[deps.chain]!.rpc[0]!.url,
+          position: paperPosition,
+          safeAddress,
+          action: result.decision.action,
+          at,
+        });
+        if (outcome.kind !== 'none') {
+          deps.repos.paperExecutions.record({
+            positionId: position.positionId,
+            at: deps.clock.now(),
+            blockNumber: at.number,
+            outcome,
+          });
+        }
+        deps.logger?.info(
+          { positionId: position.positionId, outcome: outcome.kind },
+          'paper execution completed',
+        );
+      } catch (error) {
+        deps.logger?.error(
+          { positionId: position.positionId, err: error },
+          'paper execution failed — will retry next block',
+        );
+      }
+    }
   }
 }

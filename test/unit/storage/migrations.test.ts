@@ -25,6 +25,8 @@ describe('runMigrations', () => {
         'risk_state',
         'global_controls',
         'decision_labels',
+        'withdrawal_campaigns',
+        'paper_executions',
         'schema_migrations',
       ]),
     );

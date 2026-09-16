@@ -254,6 +254,58 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 10,
+    name: 'withdrawal_campaigns',
+    up: (db) => {
+      db.exec(`
+        -- Withdrawal planner campaign state (docs/SPEC.md #8.3, Phase 7) — "where
+        -- this position's exit stands right now," UPSERT like risk_state, so the
+        -- planner picks up where it left off across pipeline runs (partial-then-
+        -- retry, priority-fee stepping). One row per position: a position can only
+        -- have one active campaign at a time (a new target level always replaces the
+        -- prior campaign rather than running two at once).
+        CREATE TABLE withdrawal_campaigns (
+          position_id TEXT PRIMARY KEY,
+          started_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          target_amount TEXT NOT NULL,
+          withdrawn_so_far TEXT NOT NULL,
+          status TEXT NOT NULL,
+          attempt_count INTEGER NOT NULL
+        );
+      `);
+    },
+  },
+  {
+    version: 11,
+    name: 'paper_executions',
+    up: (db) => {
+      db.exec(`
+        -- The paper executor's audit log (docs/SPEC.md #8.4: "paper: ... record what
+        -- would have happened"). Append-only, one row per \`runPaperExecution\` call
+        -- that actually reached a plan (i.e. every outcome except 'none' —
+        -- nothing-to-do calls aren't logged, matching decision_records' own "only
+        -- write what's evidence of something" spirit, though unlike decision_records
+        -- this is written far less often, only when execution.mode is 'paper' and a
+        -- position's action recommendation is partial_withdraw/full_exit).
+        CREATE TABLE paper_executions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          position_id TEXT NOT NULL,
+          at TEXT NOT NULL,
+          block_number TEXT NOT NULL,
+          outcome TEXT NOT NULL,
+          step_amount TEXT,
+          passed INTEGER,
+          gas_used TEXT,
+          failure_reason TEXT
+        );
+
+        CREATE INDEX idx_paper_executions_position_at
+          ON paper_executions (position_id, at DESC);
+      `);
+    },
+  },
 ];
 
 function ensureMigrationsTable(db: SentinelDatabase): void {
