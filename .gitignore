@@ -11,6 +11,10 @@ coverage/
 *.key
 keystores/
 
+# Real deployment config (your Safe address, watched positions) — personal to your
+# setup, not secret, but not meant to be tracked here; only the example config ships.
+config/sentinel.yaml
+
 # Generated data — never commit (spec #3, #9)
 reports/
 *.sqlite
