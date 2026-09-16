@@ -6,11 +6,14 @@ facts from memory — every fact below was pulled from an official source, and a
 consumed by code should ideally come from a maintained package/API rather than a
 hardcoded literal, so it stays correct as protocols upgrade.
 
-**Freshness warning:** the research below was gathered via live web search on
-2026-09-15, after this assistant's January 2026 knowledge cutoff. Treat every version
-number and date below as claimed-by-search, not verified-by-me-directly. Re-check each
-one against the primary source link before it drives a Phase 2+ implementation
-decision (adapter version selection, address book version pin, etc.).
+**Freshness warning:** most of the research below was gathered via live web search on
+2026-09-15, after this assistant's January 2026 knowledge cutoff — treat any entry not
+marked "re-verified directly" as claimed-by-search, not verified-by-me-directly, and
+re-check it against the primary source link before it drives an implementation
+decision. Entries marked "re-verified directly (2026-09-16)" were fetched live from the
+primary source (official docs site or raw GitHub) in the Phase 2 session and can be
+trusted as of that fetch, though addresses/ABIs should still be re-pulled from a
+maintained package at actual implementation time rather than copied from here.
 
 ## Aave v3 / v4
 
@@ -35,26 +38,39 @@ decision (adapter version selection, address book version pin, etc.).
     Ethereum in Jan 2026, and v3.7 on Base. It also reported **Aave v4 launched on
     Ethereum mainnet on 2026-03-30** ("hub-and-spoke" architecture), per
     https://www.theblock.co/news/defi/2026-03-30-aave-v4-launches-ethereum-mainnet-395617 .
-    **This needs first-session-of-Phase-2 re-verification**: confirm via
-    `aave.com/docs/resources/changelog` and the deployed Pool's version-reporting
-    function which exact version each _watched_ market runs before writing the v3
-    adapter's assumptions in stone. If a watched position turns out to be on an Aave v4
-    market, spec §6.2 requires a v4 adapter behind the same `ProtocolAdapter` interface.
+  - **Re-verified directly (2026-09-16, Phase 2 start)** against
+    `https://aave.com/docs/resources/changelog` (fetched live, not from memory): **both**
+    Aave v4 (hub-and-spoke, 3 hubs / 11 spokes) **and** Aave v3.7 Part 2 are live on
+    **Ethereum mainnet** concurrently — v3.7 Part 2 covers the Ethereum Core and Lido
+    markets specifically, deployed 2026-05-29. **Base** runs **v3.7 Part 2** (also part
+    of the same 2026-05-29 multi-chain rollout, alongside Polygon, Avalanche, Arbitrum,
+    BNB Chain, Linea, Plasma, Mantle). So on Ethereum there are at least two
+    concurrently-live deployments (a v4 hub/spoke and v3.7 Core/Lido) — **which one a
+    watched position is actually on is not yet knowable** until the user answers open
+    question 5 (which markets to watch) and we cross-check the specific Pool address's
+    version-reporting function on-chain. Do not assume "the Ethereum market" means one
+    or the other. Base only needs the v3 adapter for now (no Base v4 deployment found).
+    Spec §6.2 already requires a v4 adapter behind the same `ProtocolAdapter` interface
+    if a watched position turns out to be on v4 — build the v3 adapter first (covers
+    Base for sure, and the Ethereum Core/Lido markets), add v4 once a watched market
+    needs it.
 
 ## Morpho Blue
 
 - Docs: https://docs.morpho.org/learn/concepts/oracle/ ,
   https://docs.morpho.org/developers/contracts/oracles/
-  (⚠ `docs.morpho.org` and `legacy.docs.morpho.org` are both blocked by this session's
-  egress proxy — these docs could not be fetched directly this session; findings below
-  are from search-result summaries only and must be re-fetched directly in a session
-  with access before Phase 2.)
+  (`docs.morpho.org` was blocked by this session's egress proxy on 2026-09-15; **it is
+  reachable as of 2026-09-16** — re-checked directly, see below.)
 - `MarketParams` struct: `loanToken`, `collateralToken`, `oracle`, `irm`, `lltv`.
-- Oracle convention: `price()` returns the price of 1 collateral-token asset quoted in
-  loan-token asset, **scaled by 1e36**, adjusted so the exponent is
-  `36 + loanTokenDecimals - collateralTokenDecimals`. This must be re-derived precisely
-  against `docs.morpho.org/developers/contracts/oracles/` before D06/D07 price-deviation
-  math is implemented (Phase 2/4) — get-then-verify, don't trust this paraphrase.
+- **Oracle scaling, re-verified directly (2026-09-16)** by fetching
+  `https://docs.morpho.org/developers/contracts/oracles` live: `IOracle.price()`
+  returns "the price of 1 asset of collateral token quoted in 1 asset of loan token,
+  scaled by 1e36," precisely: "the price of 10**(collateral token decimals) assets of
+  collateral token quoted in 10**(loan token decimals) assets of loan token with
+  `36 + loan token decimals - collateral token decimals` decimals of precision." This
+  confirms the earlier search-derived paraphrase was correct — safe to use for D06/D07
+  price-deviation math in Phase 2/4, cite this doc + fetch date in the code comment
+  next to wherever the scaling constant is applied.
 - Contract addresses: could not confirm from this session whether Morpho Blue is
   deployed to the same address on Ethereum and Base (CREATE2 determinism claimed by
   some third-party sources, not confirmed against morpho-org's own deployment repo,
@@ -81,8 +97,33 @@ decision (adapter version selection, address book version pin, etc.).
   the vault's supply in that market is already 0, or removal was previously submitted
   and timelock elapsed) are not. Source: search summary of
   https://docs.morpho.org/curate/concepts/security-considerations/ and
-  https://github.com/morpho-org/metamorpho — re-fetch directly once `docs.morpho.org`
-  is reachable.
+  https://github.com/morpho-org/metamorpho — still needs the direct doc re-fetch (the
+  events below were pulled directly, but this specific queue/timelock behavior wasn't
+  re-verified this session); low risk since it only gates detector logic, not adapter
+  event decoding, but re-check before D-series code depends on it.
+- **Event names, re-verified directly (2026-09-16)** by fetching
+  `https://raw.githubusercontent.com/morpho-org/metamorpho/main/src/libraries/EventsLib.sol`
+  (official repo, `main` branch — not a version-pinned tag, so re-check against
+  whatever commit/tag is actually pinned as a dependency in Phase 2). Full list of
+  custom events: `SubmitTimelock(uint256)`, `SetTimelock(address indexed, uint256)`,
+  `SetSkimRecipient(address indexed)`, `SetFee(address indexed, uint256)`,
+  `SetFeeRecipient(address indexed)`, `SubmitGuardian(address indexed)`,
+  `SetGuardian(address indexed, address indexed)`,
+  `SubmitCap(address indexed, Id indexed, uint256)`,
+  `SetCap(address indexed, Id indexed, uint256)`,
+  `UpdateLastTotalAssets(uint256)`,
+  `SubmitMarketRemoval(address indexed, Id indexed)`, `SetCurator(address indexed)`,
+  `SetIsAllocator(address indexed, bool)`, `RevokePendingTimelock(address indexed)`,
+  `RevokePendingCap(address indexed, Id indexed)`,
+  `RevokePendingGuardian(address indexed)`,
+  `RevokePendingMarketRemoval(address indexed, Id indexed)`,
+  `SetSupplyQueue(address indexed, Id[])`, `SetWithdrawQueue(address indexed, Id[])`,
+  `ReallocateSupply(address indexed, Id indexed, uint256, uint256)`,
+  `ReallocateWithdraw(address indexed, Id indexed, uint256, uint256)`,
+  `AccrueInterest(uint256, uint256)`, `Skim(address indexed, address indexed, uint256)`,
+  `CreateMetaMorpho(address indexed, address indexed, address, uint256, address indexed, string, string, bytes32)`.
+  Deposit/withdraw/mint/redeem/transfer are the standard ERC-4626/ERC-20 events (not
+  custom to MetaMorpho), no separate verification needed for their signatures.
 
 ## Safe
 

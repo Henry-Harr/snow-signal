@@ -11,6 +11,18 @@ explicit instruction, then built out through the full Phase 1 foundation in the 
 session. `pnpm lint`, `pnpm typecheck`, `pnpm test` (43 tests, unit + property), and
 `pnpm build` all pass. Phase 2 (read-only protocol adapters) is next.
 
+**Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
+`lint`, `typecheck`, `test`, `build`) — all still pass; `doctor` degrades gracefully
+exactly as designed (no `config/sentinel.yaml` yet, so config/chains/notifier report
+"not configured", database opens and migrates fine). Then did the two research
+re-verifications Phase 2 lists as prerequisites (Morpho oracle scaling + MetaMorpho
+event names, Aave version check) — both done directly against primary sources this
+time (`docs.morpho.org` is no longer blocked), see `docs/SOURCES.md` and the Phase 2
+checklist below for details. **Real adapter code and fork integration tests remain
+blocked** on the open questions below (specifically 1: RPC URLs, and 5: which markets/
+vaults to watch) — wrote no adapter code this session to avoid guessing at a specific
+Aave version or Morpho vault shape before knowing the actual target.
+
 ### What's done
 
 - Old repo content (`index.html`, `resort.html`, `CNAME`, `.gitattributes` — a ski
@@ -262,10 +274,25 @@ than pinning `24` specifically, since this sandbox runs Node 22 (Maintenance LTS
 
 ### Phase 2 — Read-only protocol adapters
 
-- [ ] Re-verify Morpho oracle scaling and MetaMorpho v1.1 event names directly against
-      `docs.morpho.org` (blocked this session) before writing detector-facing math.
-- [ ] Re-verify which Aave version(s) the actually-configured watched markets run
-      (v3.x vs v4) before assuming the v3 adapter covers them.
+- [x] Re-verify Morpho oracle scaling and MetaMorpho v1.1 event names directly against
+      `docs.morpho.org` (blocked this session) before writing detector-facing math. —
+      **DONE 2026-09-16**: `docs.morpho.org` is reachable now (was blocked
+      2026-09-15). Oracle scaling confirmed exactly as previously paraphrased (1e36,
+      `36 + loanDecimals - collateralDecimals` precision) via
+      `docs.morpho.org/developers/contracts/oracles`. Full `EventsLib.sol` event list
+      pulled directly from `raw.githubusercontent.com/morpho-org/metamorpho/main/...`.
+      Both recorded in `docs/SOURCES.md`. Note: pulled from `main`, not a pinned tag —
+      re-check against whatever commit/tag actually gets pinned as a dependency.
+- [x] Re-verify which Aave version(s) the actually-configured watched markets run
+      (v3.x vs v4) before assuming the v3 adapter covers them. — **Partially done
+      2026-09-16**: confirmed via live fetch of `aave.com/docs/resources/changelog`
+      that Ethereum mainnet currently runs **both** Aave v4 (hub-and-spoke) and v3.7
+      Part 2 (Core, Lido markets) concurrently, and Base runs v3.7 Part 2 only (no Base
+      v4 found). **Still blocked** on knowing which one any specific watched position
+      uses — that requires open question 5 (which markets) to be answered, then
+      cross-checking the actual Pool address's version on-chain. Plan: build the v3
+      adapter first (definitely covers Base, and Ethereum Core/Lido), add a v4 adapter
+      behind the same `ProtocolAdapter` interface only if a watched market needs it.
 - [ ] Aave v3 adapter: reserve state, rates, caps, frozen/paused, collateral params,
       aToken balance, oracle prices, event decoding (Supply/Withdraw/Borrow/Repay/
       LiquidationCall + configurator events), reserve deficit read if version supports
