@@ -94,6 +94,31 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 4,
+    name: 'token_supply_snapshots',
+    up: (db) => {
+      db.exec(`
+        -- Point-in-time totalSupply() readings for the token-supply watcher (docs/
+        -- SPEC.md #6.6) — a time series, not an event, so it gets its own table
+        -- rather than reusing protocol_events (which mint events, a real event, do
+        -- reuse — see src/watchers/token-supply.ts). Never overwritten, so a later
+        -- pass can always recompute "how fast did supply change" from the raw series.
+        CREATE TABLE token_supply_snapshots (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          asset TEXT NOT NULL,
+          chain_id INTEGER NOT NULL,
+          total_supply TEXT NOT NULL,
+          block_number TEXT NOT NULL,
+          fetched_at INTEGER NOT NULL,
+          UNIQUE (asset, chain_id, block_number)
+        );
+
+        CREATE INDEX idx_token_supply_asset_time
+          ON token_supply_snapshots (asset, chain_id, block_number DESC);
+      `);
+    },
+  },
 ];
 
 function ensureMigrationsTable(db: SentinelDatabase): void {

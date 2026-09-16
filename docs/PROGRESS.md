@@ -7,13 +7,13 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 
 **Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete. Phase 2
 (read-only protocol adapters): complete. Phase 3 (prices and watchers): in progress** —
-price collection (Chainlink + CEX, aggregation, storage) and the governance/config
-watcher are done; DEX price reads and the token-supply/large-holder watchers are not
-started. Repo repurposed from an unrelated static ski-resort site to Sentinel per the
-user's explicit instruction, then built out through the full Phase 1 foundation in the
-same session. `pnpm lint`, `pnpm typecheck`, `pnpm test` (137 tests, unit + property),
-`pnpm build`, and `pnpm test:integration` (34 fork/live tests against real Ethereum +
-Base data and real Coinbase/Kraken APIs) all pass.
+price collection (Chainlink + CEX, aggregation, storage), the governance/config
+watcher, and the token-supply watcher are done; DEX price reads and the large-holder
+watcher are not started. Repo repurposed from an unrelated static ski-resort site to
+Sentinel per the user's explicit instruction, then built out through the full Phase 1
+foundation in the same session. `pnpm lint`, `pnpm typecheck`, `pnpm test` (145 tests,
+unit + property), `pnpm build`, and `pnpm test:integration` (36 fork/live tests
+against real Ethereum + Base data and real Coinbase/Kraken APIs) all pass.
 
 **Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
 `lint`, `typecheck`, `test`, `build`) — all still pass; `doctor` degrades gracefully
@@ -290,6 +290,30 @@ log_index)` so re-scanning an overlapping block range (the normal way to poll fo
   `format:check`/`build` all green; `pnpm test:integration` 34 tests green.
 
 Still open in Phase 3: DEX price reads, token supply watcher, large-holder watcher.
+
+**Same session, continued — token-supply watcher:**
+
+- **Migration 4 + `TokenSupplyRepository`**: a `token_supply_snapshots` table for the
+  `totalSupply()` time series — a point-in-time reading, not an event, so unlike mint
+  events (below) it needed its own table rather than reusing `protocol_events`.
+- **`src/watchers/token-supply.ts`**: `fetchTotalSupply` (quorum-read — not in spec
+  #6.1's explicit list, but it directly feeds D08, a detector that can trigger
+  de-risking, so treated with the same two-provider discipline as balances/prices)
+  and `fetchMintEvents` (`Transfer(from=0x0, ...)`, best-effort log scan, same
+  free-tier block-range constraint as the governance watcher). Mint events are
+  returned as `ProtocolEvent`s (`protocol: 'erc20'`) and stored in the _same_
+  `protocol_events` table the governance watcher uses, tagged `category:
+'token-supply'` — a real event fits that table's shape exactly, so no new table was
+  needed for it, only for the supply-snapshot series. Deliberately only _records_ the
+  raw series; deciding what counts as a "large" mint is D08's threshold job (Phase 4),
+  not this collector's.
+- Tests: 8 new unit tests (mocked pool) plus 2 fork integration tests — matching real
+  Ethereum USDC's actual `totalSupply()` exactly, and running a real (small,
+  free-tier-respecting) mint-event scan without error. All pass. `pnpm lint`/
+  `typecheck`/`test` (145 tests)/`format:check`/`build` all green;
+  `pnpm test:integration` 36 tests green.
+
+Still open in Phase 3: DEX price reads, large-holder watcher.
 
 ### What's done
 
@@ -624,8 +648,13 @@ at pinned blocks. — **Met. Phase 2 complete.**
 governance.ts` + `protocol_events` table/`ProtocolEventRepository` (migration
       3). Reuses each Phase 2 adapter's own `decodeEvents` rather than duplicating
       decoding logic — see the session note below.
-- [ ] Token supply watcher (`totalSupply` changes, large/bridge mints) for every
-      collateral asset in the exposure graph.
+- [x] Token supply watcher (`totalSupply` changes, large/bridge mints) for every
+      collateral asset in the exposure graph. — **DONE 2026-09-16**:
+      `src/watchers/token-supply.ts` + `token_supply_snapshots` table/
+      `TokenSupplyRepository` (migration 4); mint events reuse `protocol_events`
+      (category `'token-supply'`) rather than a new table. Only _records_ the raw
+      series — deciding what counts as "large" is D08's job (Phase 4), not the
+      collector's.
 - [ ] Large-holder watcher (top suppliers/borrowers per market/vault from event logs,
       shares, recent movements; borrower health where computable).
 
