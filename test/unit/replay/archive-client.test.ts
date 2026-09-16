@@ -12,7 +12,10 @@ function tempCacheDir(): string {
   return mkdtempSync(join(tmpdir(), 'sentinel-replay-archive-client-test-'));
 }
 
-function makeInnerClient(): { client: ContractReadClient; calls: { multicall: number; getLogs: number; getBlock: number } } {
+function makeInnerClient(): {
+  client: ContractReadClient;
+  calls: { multicall: number; getLogs: number; getBlock: number };
+} {
   const calls = { multicall: 0, getLogs: 0, getBlock: 0 };
   const client: ContractReadClient = {
     getBlockNumber: () => Promise.resolve(999n),

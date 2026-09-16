@@ -1,3 +1,15 @@
+# KNOWN LIMITATION (found 2026-09-16, running this scenario for real): this cannot
+# currently replay through Sentinel's Aave v3 adapter. `src/protocols/aave-v3/
+# addresses.ts` resolves the Ethereum Core market's *current* PoolDataProvider
+# address, which Aave redeployed at some point after March 2023 (confirmed on-chain:
+# that address, and one other candidate address found via search, both have empty
+# `eth_getCode` at this scenario's blocks) — reads against it at these blocks return
+# "0x" (no contract). Fixing this needs either a verified historical address (not
+# found via a bounded search this session — see docs/PROGRESS.md's Known Issues) or
+# per-scenario address overrides in the adapter, neither built yet. The scenario
+# stays here (real, sourced, ready to run) rather than being deleted, since the gap
+# is in Sentinel's address resolution, not this scenario's own validity.
+#
 # USDC depeg, March 2023 (docs/SPEC.md §9.2 item 1). Tests D10 (peg deviation) and
 # the policy-level "alert-only, never auto-exit" rule for a depeg (ADR 0005 — D10 is
 # structurally incapable of being standaloneCritical, so this scenario should never

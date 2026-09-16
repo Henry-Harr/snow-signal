@@ -59,11 +59,16 @@ export function createCachingContractReadClient(
     multicall: async (calls: ContractCall[], blockNumber: bigint) => {
       const key = cacheKey(chainId, 'multicall', {
         blockNumber,
-        calls: calls.map((c) => ({ address: c.address, functionName: c.functionName, args: c.args ?? [] })),
+        calls: calls.map((c) => ({
+          address: c.address,
+          functionName: c.functionName,
+          args: c.args ?? [],
+        })),
       });
-      const cached = await cache.get<
-        ({ status: 'success'; result: unknown } | { status: 'failure'; message: string })[]
-      >(key);
+      const cached =
+        await cache.get<
+          ({ status: 'success'; result: unknown } | { status: 'failure'; message: string })[]
+        >(key);
       if (cached) {
         return cached.map((r): ContractCallResult =>
           r.status === 'success' ? r : { status: 'failure', error: new Error(r.message) },

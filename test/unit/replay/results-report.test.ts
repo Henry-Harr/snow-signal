@@ -37,7 +37,11 @@ function quietScore(overrides: Partial<QuietScore> = {}): QuietScore {
 
 describe('generateReplayResultsMarkdown', () => {
   it('renders incident and quiet sections with real figures', () => {
-    const md = generateReplayResultsMarkdown([incidentScore(), quietScore()], [], new Date('2026-01-02T00:00:00.000Z'));
+    const md = generateReplayResultsMarkdown(
+      [incidentScore(), quietScore()],
+      [],
+      new Date('2026-01-02T00:00:00.000Z'),
+    );
     expect(md).toContain('# Replay results');
     expect(md).toContain('test-incident');
     expect(md).toContain('50.0%'); // recoverable share
@@ -50,7 +54,11 @@ describe('generateReplayResultsMarkdown', () => {
       leadTime: {
         watch: undefined,
         danger: undefined,
-        critical: { level: 'CRITICAL', at: new Date('2026-01-01T14:00:00.000Z'), leadSeconds: -7200 },
+        critical: {
+          level: 'CRITICAL',
+          at: new Date('2026-01-01T14:00:00.000Z'),
+          leadSeconds: -7200,
+        },
       },
     });
     const md = generateReplayResultsMarkdown([score], [], new Date());
@@ -66,7 +74,19 @@ describe('generateReplayResultsMarkdown', () => {
   it('renders synthetic scenario pass/fail results', () => {
     const results: SyntheticScenarioResult[] = [
       {
-        scenario: { id: 'utilization-spike', description: '', expectedMinLevel: 'WATCH', buildContext: () => ({ at: { chainId: 1, number: 0n, hash: '0x0', timestamp: 0 }, markets: [], assets: [], infra: [], priorSignals: [], assetExposure: {} }) },
+        scenario: {
+          id: 'utilization-spike',
+          description: '',
+          expectedMinLevel: 'WATCH',
+          buildContext: () => ({
+            at: { chainId: 1, number: 0n, hash: '0x0', timestamp: 0 },
+            markets: [],
+            assets: [],
+            infra: [],
+            priorSignals: [],
+            assetExposure: {},
+          }),
+        },
         signals: [],
         decision: {
           positionId: 'p',

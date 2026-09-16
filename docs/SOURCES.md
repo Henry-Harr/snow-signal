@@ -372,6 +372,18 @@ pair key>:{c:[lastPrice, lastVolume], ...}}}` — Kraken keys its response by it
     through 2023-03-14T00:00:00Z, computed the same way — comfortable margin either
     side of the confirmed event window.
   - `pointOfNoReturn` is set at block 16,803,216 (the ~2am ET trough anchor above).
+  - **Found running this scenario for real (2026-09-16)**: it cannot currently replay
+    — `getReserveData` against `0x0a16f2FCC0D44FaE41cc54e079281D84A363bECD` (the
+    currently-configured Ethereum Core `PoolDataProvider`, `src/protocols/aave-v3/
+addresses.ts`) returns `0x` at these blocks. Confirmed via direct `eth_getCode`
+    against `ETH_RPC_PRIMARY`: that address has no code at block 16,803,216 — it was
+    deployed after this scenario's window (matching the already-known "Aave's v3.7
+    Part 2 upgrade redeployed the data provider" finding from the Phase 2 session,
+    docs/PROGRESS.md). Tried one candidate historical address surfaced by a web
+    search (`0x497a1994c46d4f6C864904A9f1fac6328Cb7C8a6`, an Etherscan search result
+    labeled "Protocol Data Provider V3") — also empty at that block, so not it either.
+    Did not keep guessing further candidates (safety rule 6) — see docs/PROGRESS.md's
+    Known Issues and the scenario file's own header comment.
 
 - **KelpDAO rsETH bridge exploit, April 2026**
   (`scenarios/kelpdao-rseth-exploit-2026-04.yaml`): timeline sourced from CoinDesk's

@@ -5,8 +5,15 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { runReplayScenario } from '../../../src/replay/runner.js';
-import type { ReplayScenario } from '../../../src/replay/scenario.js';
+import { loadScenario, type ReplayScenario } from '../../../src/replay/scenario.js';
 import { createLogger } from '../../../src/core/logger.js';
+
+const POLICY = {
+  watch: { action: 'alert' as const },
+  danger: { action: 'partial_withdraw' as const, fraction: 0.5 },
+  critical: { action: 'full_exit' as const },
+  maxShareOfAvailableLiquidity: 0.05,
+};
 
 /**
  * Live-network integration test for the replay engine (`src/replay/runner.ts`),
@@ -52,17 +59,11 @@ function tinyIncidentScenario(): ReplayScenario {
 describeIfNetworked('runReplayScenario (live archive RPC + disk cache)', () => {
   it('replays a real block, persists a decision, and reads real withdrawable liquidity', async () => {
     const cacheDir = mkdtempSync(join(tmpdir(), 'sentinel-replay-cache-'));
-    const policy = {
-      watch: { action: 'alert' as const },
-      danger: { action: 'partial_withdraw' as const, fraction: 0.5 },
-      critical: { action: 'full_exit' as const },
-      maxShareOfAvailableLiquidity: 0.05,
-    };
 
     const result = await runReplayScenario(tinyIncidentScenario(), {
       archiveRpcUrls: [ETH_URL!, ETH_URL!],
       cacheDir,
-      policy,
+      policy: POLICY,
       logger,
     });
 
@@ -79,21 +80,20 @@ describeIfNetworked('runReplayScenario (live archive RPC + disk cache)', () => {
 
   it('is fast the second time (cache hit) and produces the same decision', async () => {
     const cacheDir = mkdtempSync(join(tmpdir(), 'sentinel-replay-cache-'));
-    const policy = {
-      watch: { action: 'alert' as const },
-      danger: { action: 'partial_withdraw' as const, fraction: 0.5 },
-      critical: { action: 'full_exit' as const },
-      maxShareOfAvailableLiquidity: 0.05,
-    };
     const scenario = tinyIncidentScenario();
 
-    await runReplayScenario(scenario, { archiveRpcUrls: [ETH_URL!, ETH_URL!], cacheDir, policy, logger });
+    await runReplayScenario(scenario, {
+      archiveRpcUrls: [ETH_URL!, ETH_URL!],
+      cacheDir,
+      policy: POLICY,
+      logger,
+    });
 
     const start = Date.now();
     const second = await runReplayScenario(scenario, {
       archiveRpcUrls: [ETH_URL!, ETH_URL!],
       cacheDir,
-      policy,
+      policy: POLICY,
       logger,
     });
     const elapsedMs = Date.now() - start;
@@ -101,5 +101,59 @@ describeIfNetworked('runReplayScenario (live archive RPC + disk cache)', () => {
     expect(second.decisions[0]!.level).toBe('CRITICAL');
     // Generous bound — the point is "no real network round trips," not a tight SLA.
     expect(elapsedMs).toBeLessThan(5000);
+  }, 60_000);
+});
+
+/**
+ * Golden-output regression tests (docs/SPEC.md §9.4: "golden-output tests for each
+ * scenario") for the two real named scenario files, run against the real archive RPC
+ * through a single block sliced out of each scenario's own range — the full
+ * multi-week scenarios (dozens to ~100 samples) are what `sentinel replay` itself
+ * runs for real scoring, but re-running them in full on every test invocation would
+ * be far too slow/expensive for routine CI; a single real, meaningful block from each
+ * scenario's own file is still a genuine regression check tied to real scenario data,
+ * not a synthetic fixture.
+ */
+describeIfNetworked('golden-output regression (real scenario files)', () => {
+  it('kelpdao-rseth-exploit-2026-04 reaches CRITICAL via D11_bad_debt at its point of no return', async () => {
+    const scenario = loadScenario('scenarios/kelpdao-rseth-exploit-2026-04.yaml');
+    const pointOfNoReturn = scenario.groundTruth.find((e) => e.pointOfNoReturn)!;
+    const singleBlockScenario: ReplayScenario = {
+      ...scenario,
+      blockRange: { from: pointOfNoReturn.blockNumber, to: pointOfNoReturn.blockNumber },
+    };
+    const cacheDir = mkdtempSync(join(tmpdir(), 'sentinel-replay-cache-'));
+
+    const result = await runReplayScenario(singleBlockScenario, {
+      archiveRpcUrls: [ETH_URL!, ETH_URL!],
+      cacheDir,
+      policy: POLICY,
+      logger,
+    });
+
+    expect(result.decisions).toHaveLength(1);
+    expect(result.decisions[0]!.level).toBe('CRITICAL');
+    expect(result.decisions[0]!.rule).toContain('D11_bad_debt');
+  }, 60_000);
+
+  it('usdc-depeg-2023-03 fails with the documented historical-address error (docs/PROGRESS.md Known Issues)', async () => {
+    const scenario = loadScenario('scenarios/usdc-depeg-2023-03.yaml');
+    const singleBlockScenario: ReplayScenario = {
+      ...scenario,
+      blockRange: { from: scenario.blockRange.from, to: scenario.blockRange.from },
+    };
+    const cacheDir = mkdtempSync(join(tmpdir(), 'sentinel-replay-cache-'));
+
+    await expect(
+      runReplayScenario(singleBlockScenario, {
+        archiveRpcUrls: [ETH_URL!, ETH_URL!],
+        cacheDir,
+        policy: POLICY,
+        logger,
+      }),
+    ).rejects.toThrow(/getReserveData/);
+    // A regression here is good news (the historical-address gap got fixed) — if this
+    // ever starts passing, update this test and docs/PROGRESS.md's Known Issues
+    // together rather than just deleting the assertion.
   }, 60_000);
 });

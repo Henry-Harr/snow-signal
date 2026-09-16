@@ -71,7 +71,10 @@ describe('loadScenario', () => {
   });
 
   it('rejects blockRange.from > blockRange.to', () => {
-    const yaml = VALID_INCIDENT.replace('blockRange: { from: 100, to: 200 }', 'blockRange: { from: 200, to: 100 }');
+    const yaml = VALID_INCIDENT.replace(
+      'blockRange: { from: 100, to: 200 }',
+      'blockRange: { from: 200, to: 100 }',
+    );
     expect(() => loadScenario(writeScenario(yaml))).toThrow(/from must be <= blockRange\.to/);
   });
 

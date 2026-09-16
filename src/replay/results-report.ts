@@ -74,15 +74,22 @@ export function generateReplayResultsMarkdown(
   generatedAt: Date,
   failures: { scenarioPath: string; error: string }[] = [],
 ): string {
-  const incidents = scores.filter((s): s is Extract<ScenarioScore, { kind: 'incident' }> => s.kind === 'incident');
-  const quiet = scores.filter((s): s is Extract<ScenarioScore, { kind: 'quiet' }> => s.kind === 'quiet');
+  const incidents = scores.filter(
+    (s): s is Extract<ScenarioScore, { kind: 'incident' }> => s.kind === 'incident',
+  );
+  const quiet = scores.filter(
+    (s): s is Extract<ScenarioScore, { kind: 'quiet' }> => s.kind === 'quiet',
+  );
 
   const failuresSection =
     failures.length > 0
       ? [
           '## Scenarios that failed to run',
           '',
-          ...failures.map((f) => `- \`${f.scenarioPath}\`: ${f.error}`),
+          // Only the error's first line — the full multi-line message (viem contract
+          // errors especially) belongs in the CLI's own log output, not a markdown
+          // bullet; still enough to know what broke and go look at the log.
+          ...failures.map((f) => `- \`${f.scenarioPath}\`: ${f.error.split('\n')[0]}`),
           '',
         ].join('\n')
       : '';
@@ -91,6 +98,16 @@ export function generateReplayResultsMarkdown(
     '# Replay results',
     '',
     `_Regenerated ${generatedAt.toISOString()} by \`sentinel replay\` (docs/SPEC.md §9.3) — regenerate whenever detectors or thresholds change, per that section's own instruction._`,
+    '',
+    '**Reading these numbers**: a lead time or false-alarm count only means what it ' +
+      "looks like if the underlying decisions are actually about the scenario's own " +
+      'incident. A pre-existing condition unrelated to the scenario (e.g. small ' +
+      "standing bad debt already present before an incident scenario's window even " +
+      'starts) can make a lead time look artificially long, or a "quiet" period look ' +
+      'falsely noisy — always check a few of the underlying `DecisionRecord.rule` ' +
+      'values (via `sentinel label` or the raw decision records) before trusting a ' +
+      'number at face value. See `docs/TUNING_LOG.md` for concrete findings from past ' +
+      'runs.',
     '',
     failuresSection,
     '## Incident scenarios',

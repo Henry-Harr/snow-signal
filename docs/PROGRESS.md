@@ -8,13 +8,18 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 **Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete. Phase 2
 (read-only protocol adapters): complete. Phase 3 (prices and watchers): complete.
 Phase 4 (signal detectors): complete. Phase 5 (risk engine, alerts, daily report):
-complete — this is the first version of Sentinel the user can actually run.** The
-`sentinel watch` / `sentinel report` / `sentinel label` CLI commands are wired and
-fork-tested against real chain data; Phase 6 (replay harness) is next. See the
-dedicated Phase 5 session note further down for the full detail. `pnpm lint`, `pnpm
-typecheck`, `pnpm test` (425 tests, unit + property), and `pnpm build` all pass.
-`pnpm test:integration` (54 fork/live tests against real Ethereum + Base data and
-real Coinbase/Kraken APIs) last verified green in this same session.
+complete — this is the first version of Sentinel the user can actually run. Phase 6
+(replay harness): complete.** The `sentinel watch` / `report` / `label` / `replay`
+CLI commands are all wired and tested against real chain data.
+`docs/REPLAY_RESULTS.md` and `docs/TUNING_LOG.md` are real artifacts from an actual
+run against live archive RPCs, not placeholders — see the dedicated Phase 6 session
+note further down for the full detail, including two real pre-existing bugs the
+replay harness caught (D03/D10 signals silently unreachable by the risk engine) and
+a concrete, evidence-backed detector-threshold finding. `pnpm lint`, `pnpm
+typecheck`, `pnpm test` (473 tests, unit + property), and `pnpm build` all pass.
+`pnpm test:integration` (58 fork/live tests, including golden-output replay
+regression tests against real archive RPCs) last verified green in this same
+session.
 
 **Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
 `lint`, `typecheck`, `test`, `build`) — all still pass; `doctor` degrades gracefully
@@ -661,6 +666,135 @@ backed by replay-harness evidence per safety rule 8 — revisit once Phase 6 exi
 config's current setting) honestly reports no distinct benchmark reading rather than
 comparing a rate to itself. Next: Phase 6 (replay harness).
 
+**New session: Phase 6 — replay harness, built end-to-end and run for real.** User
+said "continue" after Phase 5 shipped. Built, in order: the deterministic replay
+engine (cache, caching archive RPC client, strided block source, synthetic-position
+wiring into the live pipeline), the scenario YAML format, real-incident research,
+quiet-period scenarios, synthetic fault-injection scenarios, scoring, and the
+`sentinel replay` CLI — then actually ran the whole thing against real archive RPCs
+and iterated on what broke, rather than stopping at "it typechecks."
+
+- **`src/replay/{cache,archive-client}.ts`**: a content-addressed disk cache
+  (`.replay-cache/`, already git-ignored from Phase 1's scaffolding) and a
+  `ContractReadClient` wrapper that caches `multicall`/`getLogs`/`getBlock` — the same
+  bigint-tagging convention every storage repository already uses, so cached data
+  round-trips exactly.
+- **`src/replay/block-source.ts`** (`ReplayBlockSource`) + **ADR 0009**: replays at a
+  configurable stride instead of every confirmed block (evaluating ~200k+ blocks for
+  a 30-day quiet period is both computationally infeasible and unnecessary for
+  spec §9.3's scoring, which only needs "roughly how the position fared over time").
+- **`src/core/pipeline.ts`**: two small, additive extension points, both
+  opt-in/undefined-by-default so live behavior (`sentinel watch`) is unchanged —
+  `positionOverrides` (a synthetic `Position` per market, since replay has no real
+  Safe balance to discover, and discovering the real Safe's historical balance would
+  be both meaningless and wrong) and `eventsFromBlock` (governance/pool-flow event
+  fetch range, which live always leaves at the single current block since it never
+  has gaps, but a strided replay does).
+- **`src/replay/scenario.ts`**: zod-validated scenario format (id, description,
+  kind `incident`/`quiet`, chain, position, block range, sample interval, simulated
+  position balance, ground-truth events with at most one `pointOfNoReturn`, sources).
+- **Real-incident research** (`scenarios/usdc-depeg-2023-03.yaml`,
+  `scenarios/kelpdao-rseth-exploit-2026-04.yaml`): every date/price/timing fact
+  cross-confirmed across multiple independent sources (CNN/CNBC/CoinDesk/Decrypt/an
+  academic paper for the 2023 depeg; CoinDesk/Chainalysis/OpenZeppelin/KuCoin for
+  KelpDAO) — see `docs/SOURCES.md`'s "Replay scenarios" section. Every block number
+  was computed directly by binary-searching real block timestamps against the
+  configured archive RPC (2026-09-16), independently cross-checked against an academic
+  paper's own cited block for the 2023 event (off by 1 block — strong confirmation via
+  a completely different method). **Stream Finance xUSD collapse was researched but
+  deliberately not built as a scenario**: real on-chain research via
+  `api.morpho.org/graphql` found two genuine Morpho Blue markets pairing `xUSD`
+  collateral against `USDC` debt on Ethereum (recorded in docs/PROGRESS.md's Known
+  Issues below with their real market ids), but replaying either needs `morpho-blue`
+  direct-position support the live pipeline has never had wired up, plus a
+  `MorphoBlueAdapter.decodeEvents` fix (both found and documented, neither attempted —
+  real, scoped follow-up work, not guessed around).
+- **Quiet periods** (`scenarios/quiet-{ethereum,base}-2026-08.yaml`): 36-day windows
+  ending 1 day before the real chain head at authoring time, both bounds computed the
+  same binary-search way.
+- **`src/replay/synthetic-scenario.ts`**: five of spec's nine named synthetic fault
+  types (utilization spike, frozen oracle, depeg, whale exit, paused withdrawals) as
+  hand-built `DetectorContext`s run through the _real_ detector registry and risk
+  engine — same "one code path" principle one layer down. The other four (RPC outage,
+  provider disagreement, reorg, gas spike) are deliberately not duplicated here: the
+  first three are already covered by dedicated infra-layer tests
+  (`test/property/chain/rpc-pool-quorum.test.ts`, `test/unit/chain/block-source.test.ts`'s
+  reorg scenarios), and gas spike has nothing to inject into yet (needs Phase 7's
+  withdrawal planner).
+- **`src/replay/scoring.ts` + `results-report.ts`**: pure scoring (lead time per
+  level, recoverable share at the point of no return, false-alarm rate for quiet
+  periods) and markdown generation for `docs/REPLAY_RESULTS.md`, including a fixed
+  "how to read these numbers" caveat (added after the first real run showed exactly
+  why it's needed — see below) and a "scenarios that failed to run" section so one
+  scenario's failure is visible, not silently dropped.
+- **`src/cli/replay.ts`**: wires it all together, replacing the Phase 1 stub.
+
+**Two real bugs found and fixed while building the synthetic scenarios** (writing a
+depeg/exit-coverage fixture and checking it actually reached the risk engine, not just
+that the detector fired): `D03_exit_coverage` and `D10_peg_deviation` both keyed their
+`kind:'position'` signal subject off the protocol adapter's own `Position.id`
+(`marketId:owner`), which never matched `decide()`'s `positionId` input (the risk
+engine's canonical `protocol:chain:market:asset` form, docs/adr/0002) — so both
+signals were **silently unreachable by the risk engine in every real run**, including
+D03's spec-mandated "standing rule" liquidity alert. Invisible to every prior test
+because the risk-engine unit tests only ever built market-subject fixtures. Fixed by
+keying both off `market.marketId` instead (provably the same string as the canonical
+position id whenever a position exists, by how `pipeline.ts` constructs both). See
+`docs/DETECTORS.md`'s cross-cutting-limitations section for the fix's own detail.
+
+**Running the real scenario suite against live archive RPCs surfaced three more real
+findings**, each requiring an actual fix or a documented, evidence-backed decision
+rather than a code change made from memory:
+
+1. A wide-stride scenario's governance/pool-flow event fetch could request a range
+   past the RPC provider's `eth_getLogs` cap — the provider doesn't silently truncate,
+   it hard-errors, which crashed the _entire_ multi-scenario run on its last scenario
+   the first time, discarding every already-completed scenario's results. Fixed two
+   ways: `src/replay/runner.ts` now clamps the fetch window to the provider's actual
+   cap (9 blocks — confirmed from Alchemy's own error response's suggested corrected
+   range, not its rounder "10 block range" prose, an off-by-one caught on the very
+   next real run after the first fix) instead of just warning about it, and
+   `src/cli/replay.ts` now catches a per-scenario failure and continues with the rest.
+2. `usdc-depeg-2023-03` cannot currently replay: `src/protocols/aave-v3/addresses.ts`
+   only resolves each market's _current_ contract addresses, and Aave's Ethereum
+   Core `PoolDataProvider` has been redeployed since March 2023 (confirmed via direct
+   `eth_getCode` — the configured address, and one candidate historical address found
+   via search, both have empty code at the scenario's blocks). Not fixed this
+   session — recorded in Known Issues below rather than guessing a historical
+   address.
+3. The real replay run measured **~28 false alarms/week on both chains' 36-day quiet
+   periods**, and the KelpDAO incident scenario's "1.7 days lead time to CRITICAL"
+   turned out to mean the very first sampled block (before the exploit even happened)
+   was already `CRITICAL` — both traced to the same root cause: `D11_bad_debt`'s
+   default threshold (`minBadDebt = 1n`) fires on the real, small, persistent bad debt
+   already present in the currently-watched Aave reserves (~$1.60 on Ethereum, ~$30.88
+   on Base — dust relative to the pools' real size), which D11's own doc comment had
+   already anticipated as a possible tuning need. Logged as a proposed (not applied)
+   threshold change in the new `docs/TUNING_LOG.md`, per safety rule 8's process —
+   not applied because there's nowhere to actually apply a tuned `config.detectors`
+   value yet (see the config-wiring gap below) and because spec's own tuning process
+   (§11.4) asks for a before/after replay comparison before changing anything, which
+   needs that wiring first.
+
+Tests: 9 new unit test files (~55 new tests: cache, archive client, block source,
+scenario schema + the 2 real scenario files, scoring, results-report markdown,
+synthetic scenarios) plus 2 new/extended integration test files hitting the real
+archive RPC directly (not an Anvil fork — replay's whole point) — `runner.test.ts`
+proves the engine end-to-end against a real known-bad-debt block, cross-checking the
+live-pipeline fork test's own finding from a completely different code path, plus two
+golden-output regression tests (spec §9.4) against the real scenario files: KelpDAO
+reaches `CRITICAL` via `D11_bad_debt` at its real point-of-no-return block, and USDC
+depeg fails with the documented historical-address error (a deliberate assertion — if
+this one ever starts passing, that's a real fix to notice and update Known Issues
+for, not just an assertion to delete). Final tally: `pnpm lint`/`typecheck`/`test`
+(473 tests)/`build` all green; `pnpm test:integration` (58 fork/live tests) all green.
+
+**Phase 6 is now complete.** `docs/REPLAY_RESULTS.md` and `docs/TUNING_LOG.md` are
+real, committed artifacts from an actual run against live data, not placeholders.
+Next: Phase 7 (paper mode and exit drills) — the withdrawal planner is also what's
+needed to close the `config.detectors`/gas-scoring gaps this session found and
+deliberately left open.
+
 ### What's done
 
 - Old repo content (`index.html`, `resort.html`, `CNAME`, `.gitattributes` — a ski
@@ -851,7 +985,7 @@ call` read-only, a raw `eth_sendRawTransaction` curl, a non-Bash tool call, and 
   currently dead — nothing in `src/signals/registry.ts`/`src/cli/watch.ts` reads
   `config.detectors` at all; `defaultDetectors()` always builds every detector with its
   own hardcoded Phase 4 default thresholds regardless of what the config file says.
-  Worse than just "unwired": the config's key *shapes* (written speculatively in Phase
+  Worse than just "unwired": the config's key _shapes_ (written speculatively in Phase
   1, before Phase 4's detectors existed) don't match what several detectors' real
   constructor parameters need — e.g. D07's real thresholds are an ascending
   watch/danger/critical fraction plus a `minFlatReadings` count, but the config only has
@@ -865,7 +999,7 @@ call` read-only, a raw `eth_sendRawTransaction` curl, a non-Bash tool call, and 
   (`src/replay/**`) deliberately uses the same `defaultDetectors()` the live pipeline
   uses, so the two stay consistent with each other even though neither honors the YAML
   file — revisit as a dedicated task before safety rule 8's replay-backed threshold
-  tuning can mean anything (there's no way to *apply* a tuned threshold yet).
+  tuning can mean anything (there's no way to _apply_ a tuned threshold yet).
 - No production RPC uptime/latency has been observed yet — `sentinel watch` has only
   been run for short smoke tests and fork-pinned integration tests so far, not a real
   multi-hour stretch against live chains.
@@ -887,16 +1021,37 @@ call` read-only, a raw `eth_sendRawTransaction` curl, a non-Bash tool call, and 
      yet. Until it is, `ProtocolEventRepository.findByMarket(marketId, ...)` can never
      match a specific Morpho Blue market's events (D05's holder ledger, specifically),
      since every event lands under the chain-wide id instead.
-  Fixing both is a real, scoped follow-up (not attempted this session — see the
-  "Stream Finance scenario" note below for why). Two real Morpho Blue markets pairing
-  `xUSD` collateral against `USDC` debt on Ethereum, verified directly against
-  `api.morpho.org/graphql` (2026-09-16, not from memory): market id
-  `0xc05394d0261ed1c3c1af310007fdc4e64b3bcf650822b70526763fefc64b729e` (oracle
-  `0xc36F094172a04D93f97f7154183e13bf241c0EEF`, created block 23,015,542) and
-  `0x39fe55e5102beac5fb3caff54142f26250b97dcdb5bea6122818c7760f38b331` (oracle
-  `0x2F05Ac98D85101b5F826D51337dF573CF02A0A38`, created block 23,021,584) — both exist
-  through the real Stream Finance collapse window (Oct–Nov 2025) and are the concrete
-  target for whoever picks this back up.
+     Fixing both is a real, scoped follow-up (not attempted this session — see the
+     "Stream Finance scenario" note below for why). Two real Morpho Blue markets pairing
+     `xUSD` collateral against `USDC` debt on Ethereum, verified directly against
+     `api.morpho.org/graphql` (2026-09-16, not from memory): market id
+     `0xc05394d0261ed1c3c1af310007fdc4e64b3bcf650822b70526763fefc64b729e` (oracle
+     `0xc36F094172a04D93f97f7154183e13bf241c0EEF`, created block 23,015,542) and
+     `0x39fe55e5102beac5fb3caff54142f26250b97dcdb5bea6122818c7760f38b331` (oracle
+     `0x2F05Ac98D85101b5F826D51337dF573CF02A0A38`, created block 23,021,584) — both exist
+     through the real Stream Finance collapse window (Oct–Nov 2025) and are the concrete
+     target for whoever picks this back up.
+- **Found running `sentinel replay` for real (2026-09-16)**: `src/protocols/aave-v3/
+addresses.ts` only ever resolves each market's _current_ contract addresses, so
+  replaying a scenario from before Aave's most recent redeployment of a given
+  contract fails outright rather than reading stale-but-correct historical state —
+  `scenarios/usdc-depeg-2023-03.yaml` (March 2023) can't currently run because the
+  configured `PoolDataProvider` didn't exist yet at those blocks (see docs/SOURCES.md's
+  entry on this scenario for the on-chain confirmation and the one candidate
+  historical address that was tried and also didn't check out). Needs either a
+  verified historical address per redeployment or a per-scenario address override —
+  not built. The resilience fix (below) means this failure no longer takes down the
+  rest of a `sentinel replay` run; it's now recorded in `docs/REPLAY_RESULTS.md`'s
+  "scenarios that failed to run" section instead.
+- **Found from the first real `sentinel replay` run**: `D11_bad_debt`'s default
+  threshold (`minBadDebt = 1n`, i.e. any nonzero bad debt) is far too sensitive to the
+  real, small, persistent bad debt already present in the currently-watched Aave v3
+  Core USDC reserves (~$1.60 on Ethereum, ~$30.88 on Base) — real replay evidence
+  (36-day quiet periods, both chains) shows ~28 false alarms/week, essentially every
+  sampled block. Logged as a proposed (not yet applied) threshold change in
+  `docs/TUNING_LOG.md` with the full evidence and why it isn't applied yet (safety
+  rule 8, plus the `config.detectors`-not-wired-up gap above meaning there's nowhere
+  to actually apply a tuned value today).
 
 ---
 
@@ -1114,20 +1269,30 @@ short live smoke test against real Ethereum + Base RPCs), not literally left run
 unattended for 24 straight hours in this sandbox — see the session note below for
 exactly what was and wasn't run.
 
-### Phase 6 — Replay harness
+### Phase 6 — Replay harness — **DONE 2026-09-16**
 
-- [ ] Deterministic replay engine (injected `BlockSource`/`Clock`), disk cache
+- [x] Deterministic replay engine (injected `BlockSource`/`Clock`), disk cache
       (content-addressed, git-ignored) for archive RPC fetches.
-- [ ] Scenario format (YAML) + the scenarios in spec §9.2: USDC depeg (Mar 2023),
-      Stream Finance xUSD collapse (research exact chains/markets — may need minimal
-      read-only support or reconstruction, document the choice), KelpDAO rsETH bridge
-      exploit (Apr 2026 — research exact block range from postmortems, don't guess),
-      ≥30 quiet days per chain, synthetic stress-test fault injection.
-- [ ] Scoring (lead time, recoverable share, false alarms/week, gas) into
+- [x] Scenario format (YAML) + the scenarios in spec §9.2: USDC depeg (Mar 2023, real
+      block range, blocked on a historical-address gap — see Known Issues), Stream
+      Finance xUSD collapse (researched, deliberately deferred — see Known Issues),
+      KelpDAO rsETH bridge exploit (Apr 2026, real block range, runs successfully),
+      36-day quiet periods on both chains, five synthetic stress-test fault-injection
+      scenarios.
+- [x] Scoring (lead time, recoverable share, false alarms/week, gas) into
       `docs/REPLAY_RESULTS.md`.
 
 **Done when:** every scenario runs from cache, results documented including honest
-misses.
+misses. — **Met, with two scenarios' honest misses documented rather than forced**:
+2 of 4 real scenarios plus all 5 synthetic scenarios ran and are scored in
+`docs/REPLAY_RESULTS.md`; USDC depeg fails with a diagnosed, documented cause
+(historical contract address resolution, Known Issues below) rather than crashing the
+whole run (a resilience gap found and fixed this session); Stream Finance was
+deliberately deferred after real on-chain research hit a genuine adapter-coverage
+gap (also Known Issues) rather than guessing at unverified addresses. The replay run
+itself also surfaced a concrete, evidence-backed tuning candidate (`docs/TUNING_LOG.md`)
+and two real pre-existing bugs (see the session note below) — the harness doing
+exactly what it's for.
 
 ### Phase 7 — Paper mode and exit drills
 

@@ -134,5 +134,7 @@ export function scoreQuiet(scenario: ReplayScenario, result: ReplayRunResult): Q
 }
 
 export function scoreScenario(scenario: ReplayScenario, result: ReplayRunResult): ScenarioScore {
-  return scenario.kind === 'incident' ? scoreIncident(scenario, result) : scoreQuiet(scenario, result);
+  return scenario.kind === 'incident'
+    ? scoreIncident(scenario, result)
+    : scoreQuiet(scenario, result);
 }

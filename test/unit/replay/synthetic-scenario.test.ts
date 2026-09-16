@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { runSyntheticScenario, SYNTHETIC_SCENARIOS } from '../../../src/replay/synthetic-scenario.js';
+import {
+  runSyntheticScenario,
+  SYNTHETIC_SCENARIOS,
+} from '../../../src/replay/synthetic-scenario.js';
 
 const POLICY = {
   watch: { action: 'alert' as const },
@@ -21,7 +24,9 @@ describe('synthetic fault-injection scenarios', () => {
   it('frozen-oracle reaches WATCH via D07, capped by the single-family rule', () => {
     const scenario = SYNTHETIC_SCENARIOS.find((s) => s.id === 'frozen-oracle')!;
     const result = runSyntheticScenario(scenario, POLICY);
-    expect(result.signals.some((s) => s.detectorId === 'D07_frozen_oracle' && s.severity === 'critical')).toBe(true);
+    expect(
+      result.signals.some((s) => s.detectorId === 'D07_frozen_oracle' && s.severity === 'critical'),
+    ).toBe(true);
     expect(result.decision.level).toBe('WATCH'); // capped despite the critical-severity signal (ADR 0008)
     expect(result.passed).toBe(true);
   });

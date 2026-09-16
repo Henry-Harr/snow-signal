@@ -107,38 +107,47 @@ program
 
 program
   .command('replay')
-  .description('Replay scenarios against archived chain data and write docs/REPLAY_RESULTS.md (docs/SPEC.md #9)')
+  .description(
+    'Replay scenarios against archived chain data and write docs/REPLAY_RESULTS.md (docs/SPEC.md #9)',
+  )
   .argument('[scenarios...]', 'scenario YAML file paths (default: every file in scenarios/)')
   .option('-c, --config <path>', 'path to config file', 'config/sentinel.yaml')
   .option('--cache-dir <path>', 'disk cache directory for archive RPC responses', '.replay-cache')
   .option('--out <path>', 'where to write the results markdown', 'docs/REPLAY_RESULTS.md')
-  .action(async (scenarioArgs: string[], opts: { config: string; cacheDir: string; out: string }) => {
-    const scenarioPaths =
-      scenarioArgs.length > 0
-        ? scenarioArgs
-        : readdirSync('scenarios')
-            .filter((f) => f.endsWith('.yaml'))
-            .map((f) => join('scenarios', f));
+  .action(
+    async (scenarioArgs: string[], opts: { config: string; cacheDir: string; out: string }) => {
+      const scenarioPaths =
+        scenarioArgs.length > 0
+          ? scenarioArgs
+          : readdirSync('scenarios')
+              .filter((f) => f.endsWith('.yaml'))
+              .map((f) => join('scenarios', f));
 
-    const { scenarioResults, failures, syntheticResults, resultsPath } = await runReplay(scenarioPaths, {
-      configPath: opts.config,
-      cacheDir: opts.cacheDir,
-      resultsPath: opts.out,
-      logger,
-    });
+      const { scenarioResults, failures, syntheticResults, resultsPath } = await runReplay(
+        scenarioPaths,
+        {
+          configPath: opts.config,
+          cacheDir: opts.cacheDir,
+          resultsPath: opts.out,
+          logger,
+        },
+      );
 
-    for (const { scenario, score } of scenarioResults) {
-      console.log(`${scenario.id}: ${score.kind === 'incident' ? score.finalLevel : `${score.falseAlarmsPerWeek.toFixed(2)} false alarms/week`}`);
-    }
-    for (const failure of failures) {
-      console.error(`${failure.scenarioPath}: FAILED — ${failure.error}`);
-    }
-    for (const result of syntheticResults) {
-      console.log(`${result.scenario.id}: ${result.passed ? 'PASS' : 'FAIL'}`);
-    }
-    console.log(`Results written to ${resultsPath}`);
-    if (failures.length > 0) process.exitCode = 1;
-  });
+      for (const { scenario, score } of scenarioResults) {
+        console.log(
+          `${scenario.id}: ${score.kind === 'incident' ? score.finalLevel : `${score.falseAlarmsPerWeek.toFixed(2)} false alarms/week`}`,
+        );
+      }
+      for (const failure of failures) {
+        console.error(`${failure.scenarioPath}: FAILED — ${failure.error}`);
+      }
+      for (const result of syntheticResults) {
+        console.log(`${result.scenario.id}: ${result.passed ? 'PASS' : 'FAIL'}`);
+      }
+      console.log(`Results written to ${resultsPath}`);
+      if (failures.length > 0) process.exitCode = 1;
+    },
+  );
 
 notYetImplemented('positions', 'Phase 2');
 notYetImplemented('drill', 'Phase 7');

@@ -1,5 +1,10 @@
 import { decide } from '../risk/state-machine.js';
-import { initialPositionRiskState, riskLevelRank, type Decision, type RiskLevel } from '../risk/types.js';
+import {
+  initialPositionRiskState,
+  riskLevelRank,
+  type Decision,
+  type RiskLevel,
+} from '../risk/types.js';
 import type { SentinelConfig } from '../core/config.js';
 import type { Address, BlockRef, MarketSnapshot, Position, Signal } from '../core/types.js';
 import { defaultDetectors, evaluateAll } from '../signals/registry.js';
@@ -41,7 +46,12 @@ import type { AssetContext, Detector, DetectorContext, MarketContext } from '../
  * silently dropping the one fault type Sentinel can't actually detect yet.
  */
 
-const AT: BlockRef = { chainId: 1, number: 1_000_000n, hash: '0xsynthetic', timestamp: 1_700_000_000 };
+const AT: BlockRef = {
+  chainId: 1,
+  number: 1_000_000n,
+  hash: '0xsynthetic',
+  timestamp: 1_700_000_000,
+};
 // `positionId` and `MarketContext.marketId` are the *same* string for a position-
 // bearing market, exactly matching `src/core/pipeline.ts`'s real convention (both are
 // built from `protocol:chain:market:asset` — see that file's `positionsForChain`) —
@@ -110,7 +120,7 @@ export interface SyntheticScenario {
 
 const UTILIZATION_SPIKE: SyntheticScenario = {
   id: 'utilization-spike',
-  description: 'Injects utilization at 97% (between D01\'s danger and critical thresholds).',
+  description: "Injects utilization at 97% (between D01's danger and critical thresholds).",
   expectedMinLevel: 'WATCH',
   buildContext: () => ({
     at: AT,
@@ -136,14 +146,32 @@ const FROZEN_ORACLE: SyntheticScenario = {
         block: AT,
         oraclePrice: flatOraclePrice,
         marketQuotes: [
-          { source: 'chainlink:ethereum', asset: 'WETH', quoteAsset: 'USD', price: 2000, fetchedAt: AT.timestamp, chainId: 1, blockNumber: AT.number, raw: {} },
+          {
+            source: 'chainlink:ethereum',
+            asset: 'WETH',
+            quoteAsset: 'USD',
+            price: 2000,
+            fetchedAt: AT.timestamp,
+            chainId: 1,
+            blockNumber: AT.number,
+            raw: {},
+          },
         ],
       },
       history: [0, 1, 2].map((i) => ({
         block: { ...AT, number: AT.number - BigInt(3 - i) },
         oraclePrice: flatOraclePrice,
         marketQuotes: [
-          { source: 'chainlink:ethereum', asset: 'WETH', quoteAsset: 'USD', price: flatOraclePrice, fetchedAt: AT.timestamp, chainId: 1, blockNumber: AT.number - BigInt(3 - i), raw: {} },
+          {
+            source: 'chainlink:ethereum',
+            asset: 'WETH',
+            quoteAsset: 'USD',
+            price: flatOraclePrice,
+            fetchedAt: AT.timestamp,
+            chainId: 1,
+            blockNumber: AT.number - BigInt(3 - i),
+            raw: {},
+          },
         ],
       })),
       supplyHistory: [],
@@ -166,7 +194,7 @@ const FROZEN_ORACLE: SyntheticScenario = {
 const DEPEG: SyntheticScenario = {
   id: 'depeg',
   description:
-    'The held asset (USDC) trades at $0.90 (10% below peg, above D10\'s critical threshold) — verifies ADR 0005: even a critical-severity D10 signal never reaches CRITICAL on its own (never standaloneCritical).',
+    "The held asset (USDC) trades at $0.90 (10% below peg, above D10's critical threshold) — verifies ADR 0005: even a critical-severity D10 signal never reaches CRITICAL on its own (never standaloneCritical).",
   expectedMinLevel: 'WATCH',
   buildContext: () => ({
     at: AT,
@@ -179,8 +207,26 @@ const DEPEG: SyntheticScenario = {
         current: baseSnapshot({ availableLiquidity: 100_000_000_000n }),
         position: syntheticPosition(),
         positionAssetQuotes: [
-          { source: 'coinbase', asset: 'USDC', quoteAsset: 'USD', price: 0.9, fetchedAt: AT.timestamp, chainId: 1, blockNumber: AT.number, raw: {} },
-          { source: 'kraken', asset: 'USDC', quoteAsset: 'USD', price: 0.9, fetchedAt: AT.timestamp, chainId: 1, blockNumber: AT.number, raw: {} },
+          {
+            source: 'coinbase',
+            asset: 'USDC',
+            quoteAsset: 'USD',
+            price: 0.9,
+            fetchedAt: AT.timestamp,
+            chainId: 1,
+            blockNumber: AT.number,
+            raw: {},
+          },
+          {
+            source: 'kraken',
+            asset: 'USDC',
+            quoteAsset: 'USD',
+            price: 0.9,
+            fetchedAt: AT.timestamp,
+            chainId: 1,
+            blockNumber: AT.number,
+            raw: {},
+          },
         ],
       }),
     ],
@@ -193,7 +239,8 @@ const DEPEG: SyntheticScenario = {
 
 const WHALE_EXIT: SyntheticScenario = {
   id: 'whale-exit',
-  description: 'A top holder with $1M supplied one hour ago has fully exited (100% withdrawn) — D05\'s own critical band.',
+  description:
+    "A top holder with $1M supplied one hour ago has fully exited (100% withdrawn) — D05's own critical band.",
   expectedMinLevel: 'WATCH',
   buildContext: () => {
     const whale = '0x0000000000000000000000000000000000bEEF' as Address;
@@ -201,7 +248,15 @@ const WHALE_EXIT: SyntheticScenario = {
       at: AT,
       markets: [
         baseMarketContext({
-          holdersHistory: [{ holder: whale, supply: 1_000_000n, borrow: 0n, collateral: 0n, lastMovementBlock: AT.number - 300n }],
+          holdersHistory: [
+            {
+              holder: whale,
+              supply: 1_000_000n,
+              borrow: 0n,
+              collateral: 0n,
+              lastMovementBlock: AT.number - 300n,
+            },
+          ],
           holders: [],
         }),
       ],
@@ -220,7 +275,9 @@ const PAUSED_WITHDRAWALS: SyntheticScenario = {
   expectedMinLevel: 'WATCH',
   buildContext: () => ({
     at: AT,
-    markets: [baseMarketContext({ current: baseSnapshot({ flags: { paused: true, frozen: false } }) })],
+    markets: [
+      baseMarketContext({ current: baseSnapshot({ flags: { paused: true, frozen: false } }) }),
+    ],
     assets: [],
     infra: [],
     priorSignals: [],

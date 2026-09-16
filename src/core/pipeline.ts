@@ -158,7 +158,8 @@ async function assembleAaveMarketContext(
   const collateralExposure = await adapter.collateralExposure(position.marketId, at);
   const override = deps.positionOverrides?.[position.marketId];
   const myPosition: Position | undefined =
-    override ?? (await adapter.discoverPositions(safeAddress, at)).find(
+    override ??
+    (await adapter.discoverPositions(safeAddress, at)).find(
       (p) => p.marketId === position.marketId,
     );
 
@@ -239,7 +240,8 @@ async function assembleMorphoVaultMarketContext(
   const collateralExposure = await adapter.collateralExposure(position.marketId, at);
   const override = deps.positionOverrides?.[position.marketId];
   const myPosition =
-    override ?? (await adapter.discoverPositions(safeAddress, at)).find(
+    override ??
+    (await adapter.discoverPositions(safeAddress, at)).find(
       (p) => p.marketId === position.marketId,
     );
 

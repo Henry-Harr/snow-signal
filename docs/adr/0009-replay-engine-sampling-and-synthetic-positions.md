@@ -19,7 +19,7 @@ before writing any replay code.
   "roughly how the position would have fared over time." Each scenario YAML declares
   its own `sampleIntervalBlocks` — a real block is still read and pinned at every
   sampled point (never interpolated or synthesized), so every detector's input is
-  still genuine on-chain state at that block; only the *interval between* evaluated
+  still genuine on-chain state at that block; only the _interval between_ evaluated
   blocks is coarser than "every single one." Crisis scenarios (hours to days) use a
   small interval to resolve the point of no return precisely; quiet-period scenarios
   (30 days) use a much larger one, since their whole purpose is a false-alarm count,
@@ -28,17 +28,17 @@ before writing any replay code.
   configured Safe's actual on-chain balance (`ProtocolAdapter.discoverPositions`).
   Replaying a scenario from years ago against a Safe that (a) didn't hold a position in
   that market at that block, and/or (b) is a real address whose historical balance is
-  irrelevant to "what would Sentinel have told *a* position holder" would either find
+  irrelevant to "what would Sentinel have told _a_ position holder" would either find
   nothing (empty context, nothing to score) or accidentally depend on the Safe's real
   unrelated history. Spec §9.2 itself says a scenario declares "a simulated position for
   me" — so `PipelineDeps` gains an optional `positionOverrides: Record<marketId,
-  Position>`; when present for a market, `src/core/pipeline.ts` uses that `Position`
+Position>`; when present for a market, `src/core/pipeline.ts` uses that `Position`
   directly instead of calling `discoverPositions`, skipping the live discovery RPC
   calls entirely (a synthetic position needs no live balance read). Everything
   downstream — snapshotting, collateral exposure, governance/pool-flow events, the
   detector registry, the risk engine, decision persistence, alert formatting — is
   **unchanged, the same code path live and replay both run** (docs/ARCHITECTURE.md
-  #2's "one code path" principle). Only the *source* of one input (the position) is
+  #2's "one code path" principle). Only the _source_ of one input (the position) is
   swapped, exactly the same shape of extension point `Clock`/`BlockSource` already are.
 - **Event fetch windows must cover the gap between samples, not just the sampled
   block.** `src/core/pipeline.ts`'s governance/pool-flow event fetch was originally
@@ -52,7 +52,7 @@ before writing any replay code.
   already-known ~10-block `eth_getLogs` free-tier cap (`src/watchers/governance.ts`,
   found in the Phase 3 session): a stride wider than ~10 blocks risks the RPC
   provider rejecting that fetch outright — confirmed for real running the full
-  scenario suite against live archive RPCs (Alchemy *and* Ankr both hard-error past
+  scenario suite against live archive RPCs (Alchemy _and_ Ankr both hard-error past
   their own range cap, rather than silently truncating), which crashed the whole
   multi-scenario run the first time it happened, discarding every already-completed
   scenario's results. Rather than build chunked fetching now (a real side-project of
@@ -81,7 +81,7 @@ before writing any replay code.
 - `positionOverrides` bypasses `discoverPositions`, so a replay run never exercises
   that adapter method — Phase 2's fork tests already cover it against live state; this
   isn't a regression in coverage, just a scope note.
-- Recoverable share still calls the *real* `withdrawable()` per protocol at each
+- Recoverable share still calls the _real_ `withdrawable()` per protocol at each
   sampled block for the synthetic position, since that path doesn't depend on how the
   position was sourced — this is the one place replay's "recoverable share" score is
   genuinely measuring real historical liquidity, not a synthetic figure.

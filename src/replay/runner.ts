@@ -4,7 +4,11 @@ import { createCachingContractReadClient } from './archive-client.js';
 import { DiskCache } from './cache.js';
 import { ReplayBlockSource } from './block-source.js';
 import { ReplayScenarioError, type ReplayScenario } from './scenario.js';
-import { createViemContractReadClient, type ContractCallResult, type ContractReadClient } from '../chain/client.js';
+import {
+  createViemContractReadClient,
+  type ContractCallResult,
+  type ContractReadClient,
+} from '../chain/client.js';
 import { RpcPool } from '../chain/rpc-pool.js';
 import { FixedClock, SystemClock } from '../core/clock.js';
 import type { SentinelConfig } from '../core/config.js';
@@ -76,7 +80,12 @@ function marketIdFor(scenario: ReplayScenario): string {
 
 function scenarioConfig(scenario: ReplayScenario): SentinelConfig['positions'][number] {
   return scenario.position.protocol === 'aave-v3'
-    ? { protocol: 'aave-v3', chain: scenario.chain, market: scenario.position.market, asset: scenario.position.asset }
+    ? {
+        protocol: 'aave-v3',
+        chain: scenario.chain,
+        market: scenario.position.market,
+        asset: scenario.position.asset,
+      }
     : { protocol: 'morpho-vault', chain: scenario.chain, vault: scenario.position.vault };
 }
 
@@ -107,7 +116,8 @@ async function resolveSyntheticAssetAddress(
 
 function unwrapAddress(result: ContractCallResult | undefined, context: string): Address {
   if (!result) throw new ReplayScenarioError(`${context}: missing multicall result`);
-  if (result.status === 'failure') throw new ReplayScenarioError(`${context}: ${result.error.message}`);
+  if (result.status === 'failure')
+    throw new ReplayScenarioError(`${context}: ${result.error.message}`);
   return result.result as Address;
 }
 
@@ -155,7 +165,11 @@ async function readWithdrawable(
         });
 
   const estimate = await adapter.withdrawable(position, at);
-  return { blockNumber: at.number, availableNow: estimate.availableNow, totalPosition: estimate.totalPosition };
+  return {
+    blockNumber: at.number,
+    availableNow: estimate.availableNow,
+    totalPosition: estimate.totalPosition,
+  };
 }
 
 export async function runReplayScenario(
@@ -231,7 +245,8 @@ export async function runReplayScenario(
       // the known, documented D05/D12/D13 gap for wide-stride scenarios (ADR 0009's
       // addendum) — clamping just makes that gap fail safe instead of failing loudly.
       const MAX_LOG_RANGE = 9n;
-      const eventsFromBlock = at.number - fullGap > MAX_LOG_RANGE ? at.number - MAX_LOG_RANGE : fullGap;
+      const eventsFromBlock =
+        at.number - fullGap > MAX_LOG_RANGE ? at.number - MAX_LOG_RANGE : fullGap;
       if (at.number - fullGap > MAX_LOG_RANGE) {
         options.logger?.warn(
           { scenario: scenario.id, from: fullGap.toString(), to: at.number.toString() },

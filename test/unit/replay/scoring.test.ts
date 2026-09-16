@@ -17,7 +17,12 @@ function scenario(overrides: Partial<ReplayScenario> = {}): ReplayScenario {
     sampleIntervalBlocks: 10n,
     simulatedPositionBalanceRaw: '1000000000',
     groundTruth: [
-      { at: '2026-01-01T12:00:00.000Z', blockNumber: 150n, description: 'poNR', pointOfNoReturn: true },
+      {
+        at: '2026-01-01T12:00:00.000Z',
+        blockNumber: 150n,
+        description: 'poNR',
+        pointOfNoReturn: true,
+      },
     ],
     sources: [{ url: 'https://example.com', note: 'test' }],
     ...overrides,
@@ -87,7 +92,12 @@ describe('scoreIncident', () => {
 
   it('reports undefined recoverable share when no sample exists at or before the point of no return', () => {
     const s = scenario();
-    const result: ReplayRunResult = { scenario: s, decisions: [], withdrawable: [], blocksProcessed: 0 };
+    const result: ReplayRunResult = {
+      scenario: s,
+      decisions: [],
+      withdrawable: [],
+      blocksProcessed: 0,
+    };
     const score = scoreIncident(s, result);
     expect(score.recoverableShareAtPointOfNoReturn).toBeUndefined();
   });
@@ -107,7 +117,12 @@ describe('scoreIncident', () => {
 
   it('throws for a scenario missing a pointOfNoReturn event', () => {
     const s = scenario({ groundTruth: [] });
-    const result: ReplayRunResult = { scenario: s, decisions: [], withdrawable: [], blocksProcessed: 0 };
+    const result: ReplayRunResult = {
+      scenario: s,
+      decisions: [],
+      withdrawable: [],
+      blocksProcessed: 0,
+    };
     expect(() => scoreIncident(s, result)).toThrow(/pointOfNoReturn/);
   });
 });
