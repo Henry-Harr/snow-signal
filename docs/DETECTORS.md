@@ -91,6 +91,21 @@ per-detector:
 - **D09's DEX depth is a single-active-tick approximation**, not full concentrated-
   liquidity tick-walking — it systematically under-, not over-, estimates true depth,
   which is the safer direction for a risk detector to err in.
+- **No detector reads `MarketSnapshot.flags.paused`** (found in the Phase 6 session,
+  building a synthetic "paused withdrawals" fault-injection scenario —
+  `src/replay/synthetic-scenario.ts`). A market flipping to paused produces zero
+  signals today; a real detector for this (or extending an existing one) is open work,
+  not yet built.
+- **D03/D10's `kind:'position'` signal subject was fixed in the Phase 6 session**:
+  both used to key off the protocol adapter's own `Position.id` (`marketId:owner`),
+  which never matched `decide()`'s `positionId` input (the canonical
+  `protocol:chain:market:asset` form, docs/adr/0002) — so both signals were silently
+  unreachable by the risk engine in every real run. Now both key off `market.marketId`
+  instead, which is provably the same string as the canonical position id whenever
+  `MarketContext.position` is set (see the fix's own comment in
+  `src/signals/D03_exit_coverage.ts`). Caught by a synthetic replay scenario, not by
+  any of Phase 4/5's existing unit/property tests — see docs/PROGRESS.md's Phase 6
+  session note for why those tests never exercised this path.
 
 ## Testing convention
 

@@ -847,12 +847,56 @@ call` read-only, a raw `eth_sendRawTransaction` curl, a non-Bash tool call, and 
 - Vault look-through exposure (a vault's risk via the underlying markets it allocates
   into) isn't resolved in `src/risk/context.ts`'s `buildAssetExposure` yet — only
   direct market exposure (see that file's own doc comment).
-- All sixteen detector thresholds in `config/sentinel.yaml` are still the Phase 4
-  placeholders — safety rule 8 requires replay-harness evidence (Phase 6) before any
-  of them can responsibly change.
+- **Found in the Phase 6 session**: `config/sentinel.yaml`'s `detectors:` section is
+  currently dead — nothing in `src/signals/registry.ts`/`src/cli/watch.ts` reads
+  `config.detectors` at all; `defaultDetectors()` always builds every detector with its
+  own hardcoded Phase 4 default thresholds regardless of what the config file says.
+  Worse than just "unwired": the config's key *shapes* (written speculatively in Phase
+  1, before Phase 4's detectors existed) don't match what several detectors' real
+  constructor parameters need — e.g. D07's real thresholds are an ascending
+  watch/danger/critical fraction plus a `minFlatReadings` count, but the config only has
+  `dangerMarketMove`/`criticalMarketMove`; D11's real parameter is a raw bigint
+  (`minBadDebt`), but the config has a USD amount (`criticalAmountUsd`), which can't be
+  converted to a raw threshold without a price and decimals at config-load time. Fixing
+  this properly means either rewriting the config schema to match each detector's real
+  parameter shape, or writing a per-detector translation layer — deliberately **not**
+  attempted in the Phase 6 session to avoid guessing a mapping (that's exactly the kind
+  of silent threshold error safety rule 8 exists to prevent). For now, replay
+  (`src/replay/**`) deliberately uses the same `defaultDetectors()` the live pipeline
+  uses, so the two stay consistent with each other even though neither honors the YAML
+  file — revisit as a dedicated task before safety rule 8's replay-backed threshold
+  tuning can mean anything (there's no way to *apply* a tuned threshold yet).
 - No production RPC uptime/latency has been observed yet — `sentinel watch` has only
   been run for short smoke tests and fork-pinned integration tests so far, not a real
   multi-hour stretch against live chains.
+- **Found in the Phase 6 session, while researching the Stream Finance xUSD scenario**:
+  two real, pre-existing gaps that block replaying (or ever live-watching) a direct
+  `morpho-blue` position, neither hit before because nothing has ever exercised one
+  through the pipeline:
+  1. `src/core/pipeline.ts`'s `positionsForChain`/`ChainPosition` only handles
+     `aave-v3` and `morpho-vault` — a configured `morpho-blue` position (the config
+     schema already accepts one, `src/core/config.ts`'s `morphoBluePositionSchema`) is
+     silently skipped, never assembled into a `MarketContext` at all.
+  2. `MorphoBlueAdapter.decodeEvents` (`src/protocols/morpho-blue/adapter.ts`) tags
+     every decoded event with `marketId: this.id` — `"morpho-blue:<chain>"`,
+     chain-wide, not the specific market — because Morpho Blue is one shared contract
+     hosting many isolated markets. Every Morpho Blue `Supply`/`Withdraw`/`Borrow`/
+     `Repay`/etc. event's own args include the specific market's `id`
+     (verified via `api.morpho.org/graphql`'s schema this session), so this is
+     fixable by reading that per-event, not a fundamental limitation — just not done
+     yet. Until it is, `ProtocolEventRepository.findByMarket(marketId, ...)` can never
+     match a specific Morpho Blue market's events (D05's holder ledger, specifically),
+     since every event lands under the chain-wide id instead.
+  Fixing both is a real, scoped follow-up (not attempted this session — see the
+  "Stream Finance scenario" note below for why). Two real Morpho Blue markets pairing
+  `xUSD` collateral against `USDC` debt on Ethereum, verified directly against
+  `api.morpho.org/graphql` (2026-09-16, not from memory): market id
+  `0xc05394d0261ed1c3c1af310007fdc4e64b3bcf650822b70526763fefc64b729e` (oracle
+  `0xc36F094172a04D93f97f7154183e13bf241c0EEF`, created block 23,015,542) and
+  `0x39fe55e5102beac5fb3caff54142f26250b97dcdb5bea6122818c7760f38b331` (oracle
+  `0x2F05Ac98D85101b5F826D51337dF573CF02A0A38`, created block 23,021,584) — both exist
+  through the real Stream Finance collapse window (Oct–Nov 2025) and are the concrete
+  target for whoever picks this back up.
 
 ---
 

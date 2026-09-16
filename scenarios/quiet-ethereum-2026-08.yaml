@@ -1,0 +1,37 @@
+# Quiet period, Ethereum, ~36 days (docs/SPEC.md §9.2 item 4: "at least 30 recent
+# days per chain with no major incident, to measure false alarms"). "Quiet" here
+# means: no major DeFi/Aave/USDC incident was found in this session's research
+# (2026-09-16) affecting this window — not an exhaustive audit of every possible
+# event; if a real incident is later found to have occurred in this range, this
+# scenario should be corrected or replaced, not silently kept.
+#
+# Block range ends 1 day before the real chain head at scenario-authoring time (a
+# small safety margin so the range never touches not-yet-fully-confirmed blocks) and
+# spans back 36 days from there — both bounds computed directly against the real
+# archive RPC (2026-09-16), not estimated.
+#
+# sampleIntervalBlocks is 1800 (~6 hours at Ethereum's ~12s/block) — quiet periods
+# only need a false-alarm *rate*, not fine timing resolution (ADR 0009), so this uses
+# a much coarser stride than the incident scenarios' 300-block (~1 hour) choice.
+id: quiet-ethereum-2026-08
+description: >
+  A recent ~36-day quiet window on Ethereum with no known major incident, for
+  measuring Sentinel's false-alarm rate on Aave v3 Core USDC.
+kind: quiet
+chain: ethereum
+chainId: 1
+position:
+  protocol: aave-v3
+  market: core
+  asset: USDC
+blockRange:
+  from: 25725624 # 2026-08-10T15:54:59Z
+  to: 25983893 # 2026-09-15T15:54:59Z
+sampleIntervalBlocks: 1800
+simulatedPositionBalanceRaw: '1000000000000' # 1,000,000 USDC (6 decimals)
+groundTruth: []
+sources:
+  - url: 'https://etherscan.io/block/25725624'
+    note: 'Range start block, computed by binary-searching the real archive RPC for the block at 2026-08-10T15:54:59Z.'
+  - url: 'https://etherscan.io/block/25983893'
+    note: 'Range end block (1 day before scenario-authoring-time head), computed the same way, for 2026-09-15T15:54:59Z.'

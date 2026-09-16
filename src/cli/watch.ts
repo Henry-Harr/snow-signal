@@ -12,6 +12,7 @@ import { TelegramNotifier } from '../notify/telegram.js';
 import type { Notifier } from '../notify/types.js';
 import { pollTelegramUpdatesOnce, type TelegramPollOptions } from '../notify/telegram-poll.js';
 import type { TelegramCommandDeps } from '../notify/telegram-commands.js';
+import { DEFAULT_DWELL_SECONDS } from '../risk/types.js';
 import { defaultDetectors } from '../signals/registry.js';
 import { ChainStateRepository } from '../storage/chain-state-repository.js';
 import { openDatabase } from '../storage/db.js';
@@ -38,12 +39,6 @@ import { RiskStateRepository } from '../storage/risk-state-repository.js';
  */
 
 const DEFAULT_POLL_INTERVAL_MS = 15_000;
-
-/** Hysteresis dwell time (ADR 0008) — not yet configurable in `sentinel.yaml` and not
- * yet backed by replay-harness evidence for a different value (safety rule 8: "a
- * single day of results is never enough"). One hour is a reasonable starting point;
- * revisit via `docs/TUNING_LOG.md` once the replay harness (Phase 6) exists. */
-const DEFAULT_DWELL_SECONDS = 3600;
 
 export interface WatchOptions {
   configPath: string;

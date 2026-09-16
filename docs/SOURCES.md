@@ -344,6 +344,62 @@ pair key>:{c:[lastPrice, lastVolume], ...}}}` — Kraken keys its response by it
   consumer (`src/watchers/large-holders.ts`) picking a different event subset than the
   governance watcher does from the same ABIs.
 
+## Replay scenarios (Phase 6, §9.2)
+
+- **USDC depeg, March 2023** (`scenarios/usdc-depeg-2023-03.yaml`): event narrative
+  cross-confirmed across multiple independent outlets (2026-09-16 web search) —
+  Silicon Valley Bank was closed 2023-03-09; Circle disclosed ~$3.3B (≈8% of reserves)
+  stuck at SVB the evening of 2023-03-10 ET; USDC traded down to a low of **$0.8774**
+  on 2023-03-11 (CoinGecko ATL, corroborated by CNN/CNBC/CoinDesk/Decrypt reporting the
+  same ~$0.87–0.88 range); Treasury/Fed/FDIC announced full depositor protection
+  2023-03-12, and USDC recovered to ~$0.99+ within about 48 hours. An academic paper
+  (`arxiv.org/html/2606.07442v1`, "Tracing Stablecoin Contagion during the USDC Depeg
+  after the Silicon Valley Bank Collapse") independently defines the same "March 9–13,
+  2023" event window and cites Ethereum block **16,801,144** as its own March 11 daily
+  snapshot.
+  - **Block numbers were not taken from any of the above sources** (none gives
+    block-level precision) — computed directly by binary-searching real block
+    timestamps against the actually-configured archive RPC (`ETH_RPC_PRIMARY`,
+    2026-09-16): block **16,801,143** for 2023-03-11T00:00:00Z (1 block off the arxiv
+    paper's independently-cited 16,801,144 for the same day — strong cross-confirmation
+    via a completely different method), block **16,802,088** for
+    2023-03-11T03:11:00Z (CoinDesk's cited time for Circle's confirmation tweet), and
+    block **16,803,216** for 2023-03-11T06:59:59Z (≈2am ET, the time CNN's reporting
+    associates with USDC's reported ~$0.87 trough — reporting doesn't specify an exact
+    minute, so this is the best-supported hour-level anchor, not a claimed precise
+    bottom tick).
+  - Scenario's `blockRange` (16,786,948 to 16,822,491) covers 2023-03-09T00:00:00Z
+    through 2023-03-14T00:00:00Z, computed the same way — comfortable margin either
+    side of the confirmed event window.
+  - `pointOfNoReturn` is set at block 16,803,216 (the ~2am ET trough anchor above).
+
+- **KelpDAO rsETH bridge exploit, April 2026**
+  (`scenarios/kelpdao-rseth-exploit-2026-04.yaml`): timeline sourced from CoinDesk's
+  contemporaneous reporting (2026-09-16 web search,
+  `coindesk.com/tech/2026/04/19/...`) — attacker compromised the RPC nodes KelpDAO's
+  single LayerZero DVN relied on, causing it to attest a fabricated cross-chain
+  message and mint 116,500 rsETH (~$292M) with no real backing; drain at **17:35 UTC**
+  on 2026-04-18, two further failed drain attempts at 18:26/18:28 UTC, Kelp's
+  emergency pause at **18:21 UTC** (46 minutes after the drain, per CoinDesk's own
+  stated figure). 89,567 of the drained rsETH was deposited on Aave as collateral to
+  borrow ~$190M in WETH — bad debt once the fraud was revealed. Cross-checked against
+  Chainalysis (`chainalysis.com/blog/kelpdao-bridge-exploit-april-2026`, confirms
+  Ethereum + L2s as the paused chains and the April 18 date, no more precise on time)
+  and OpenZeppelin (`openzeppelin.com/news/lessons-from-kelpdao-hack`, attack
+  mechanism detail; confirms WETH pools across Ethereum/Arbitrum/Base/Mantle/Linea hit
+  100% utilization, corroborating the "billions left Aave within two days" framing
+  spec's own scenario description uses).
+  - **Block numbers, as with the USDC depeg scenario, were computed directly** against
+    the real archive RPC (2026-09-16): block **24,908,282** for
+    2026-04-18T17:35:00Z (the drain, this scenario's `pointOfNoReturn`), block
+    **24,908,511** for 2026-04-18T18:21:00Z (the emergency pause), bracketed by
+    **24,895,841** (2026-04-17T00:00:00Z) and **24,924,560** (2026-04-21T00:00:00Z)
+    for the scenario's `blockRange`.
+  - This scenario is watched through Aave v3 Ethereum Core USDC (Sentinel's actually
+    configured position), not the WETH reserve the exploit's own collateral sat in —
+    per spec's own instruction to test "how the watched stablecoin reserves behaved
+    during the rush to withdraw," not to reconstruct the WETH-specific mechanics.
+
 ## Runtime / tooling versions
 
 - Node.js: Active LTS is **Node 24** as of 2026-09-15 (Node 22 is in Maintenance LTS,

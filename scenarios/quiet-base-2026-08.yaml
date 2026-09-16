@@ -1,0 +1,29 @@
+# Quiet period, Base, ~36 days (docs/SPEC.md §9.2 item 4). Same rationale and caveats
+# as scenarios/quiet-ethereum-2026-08.yaml — "quiet" means no major incident was found
+# in this session's research (2026-09-16), not an exhaustive audit.
+#
+# sampleIntervalBlocks is 10800 (~6 hours at Base's ~2s/block) — same ~6-hour cadence
+# as the Ethereum quiet scenario, in real-time terms, despite the very different block
+# number (Base produces blocks roughly 6x faster than Ethereum).
+id: quiet-base-2026-08
+description: >
+  A recent ~36-day quiet window on Base with no known major incident, for measuring
+  Sentinel's false-alarm rate on Aave v3 Core USDC.
+kind: quiet
+chain: base
+chainId: 8453
+position:
+  protocol: aave-v3
+  market: core
+  asset: USDC
+blockRange:
+  from: 49793988 # 2026-08-10T15:55:23Z
+  to: 51349188 # 2026-09-15T15:55:23Z
+sampleIntervalBlocks: 10800
+simulatedPositionBalanceRaw: '1000000000000' # 1,000,000 USDC (6 decimals)
+groundTruth: []
+sources:
+  - url: 'https://basescan.org/block/49793988'
+    note: 'Range start block, computed by binary-searching the real archive RPC for the block at 2026-08-10T15:55:23Z.'
+  - url: 'https://basescan.org/block/51349188'
+    note: 'Range end block (1 day before scenario-authoring-time head), computed the same way, for 2026-09-15T15:55:23Z.'

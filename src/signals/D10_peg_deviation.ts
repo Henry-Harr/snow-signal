@@ -68,7 +68,9 @@ export function createD10Detector(
         signals.push({
           detectorId: D10_ID,
           family: 'peg',
-          subject: { kind: 'position', id: position.id },
+          // `market.marketId`, not `position.id` — see the identical fix/comment on
+          // D03 (`src/signals/D03_exit_coverage.ts`) for why.
+          subject: { kind: 'position', id: market.marketId },
           severity,
           // Never standalone-critical — see this detector's doc comment and ADR 0005.
           standaloneCritical: false,

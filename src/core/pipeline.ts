@@ -84,6 +84,20 @@ export interface PipelineDeps {
   killSwitchActive: boolean;
   dwellSeconds: number;
   configHash: string;
+  /** Replay-only (docs/adr/0009): a synthetic `Position` per market id, used instead
+   * of live `discoverPositions` when present. `undefined`/absent for a market means
+   * "use live discovery," so live callers (`sentinel watch`) never need to set this
+   * at all. */
+  positionOverrides?: Record<string, Position>;
+  /** Replay-only (docs/adr/0009 addendum below): the first block to scan for
+   * governance/pool-flow events, instead of always just `at.number`. Live callers
+   * process every confirmed block in sequence, so a single-block window
+   * (`[at.number, at.number]`) never has a gap; a strided replay does skip blocks
+   * between samples, and without this override those skipped blocks' events (large-
+   * holder movements, governance changes) would silently never be recorded, quietly
+   * breaking D05/D12/D13 for any scenario with a stride wider than one block. Absent
+   * for live, so `sentinel watch`'s behavior is completely unchanged. */
+  eventsFromBlock?: bigint;
 }
 
 export interface ChainPosition {
@@ -142,22 +156,26 @@ async function assembleAaveMarketContext(
   deps.repos.marketSnapshots.record('aave-v3', current);
 
   const collateralExposure = await adapter.collateralExposure(position.marketId, at);
-  const positions = await adapter.discoverPositions(safeAddress, at);
-  const myPosition: Position | undefined = positions.find((p) => p.marketId === position.marketId);
+  const override = deps.positionOverrides?.[position.marketId];
+  const myPosition: Position | undefined =
+    override ?? (await adapter.discoverPositions(safeAddress, at)).find(
+      (p) => p.marketId === position.marketId,
+    );
 
   const poolAddress = AAVE_V3_MARKETS[chain!]![market!]!.pool;
   const configuratorAddress = await resolveAaveConfiguratorAddress(deps.pool, poolAddress, at);
+  const eventsFromBlock = deps.eventsFromBlock ?? at.number;
   const governanceEvents = await fetchGovernanceEvents(
     deps.pool,
     [aaveGovernanceTarget(adapter, configuratorAddress)],
-    at.number,
+    eventsFromBlock,
     at.number,
     deps.logger,
   );
   const poolFlowEvents = await fetchPoolFlowEvents(
     deps.pool,
     [aavePoolFlowTarget(adapter, poolAddress)],
-    at.number,
+    eventsFromBlock,
     at.number,
     deps.logger,
   );
@@ -219,20 +237,24 @@ async function assembleMorphoVaultMarketContext(
   deps.repos.marketSnapshots.record('morpho-vault', current);
 
   const collateralExposure = await adapter.collateralExposure(position.marketId, at);
-  const positions = await adapter.discoverPositions(safeAddress, at);
-  const myPosition = positions.find((p) => p.marketId === position.marketId);
+  const override = deps.positionOverrides?.[position.marketId];
+  const myPosition =
+    override ?? (await adapter.discoverPositions(safeAddress, at)).find(
+      (p) => p.marketId === position.marketId,
+    );
 
+  const eventsFromBlock = deps.eventsFromBlock ?? at.number;
   const governanceEvents = await fetchGovernanceEvents(
     deps.pool,
     [morphoVaultGovernanceTarget(adapter, vaultAddress as Address)],
-    at.number,
+    eventsFromBlock,
     at.number,
     deps.logger,
   );
   const poolFlowEvents = await fetchPoolFlowEvents(
     deps.pool,
     [morphoVaultPoolFlowTarget(adapter, vaultAddress as Address)],
-    at.number,
+    eventsFromBlock,
     at.number,
     deps.logger,
   );

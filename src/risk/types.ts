@@ -74,6 +74,17 @@ export interface GlobalControls {
 
 export const DEFAULT_GLOBAL_CONTROLS: GlobalControls = { killSwitchActive: false };
 
+/** Hysteresis dwell time (ADR 0008) — not yet configurable in `sentinel.yaml` and not
+ * yet backed by replay-harness evidence for a different value (safety rule 8: "a
+ * single day of results is never enough"). One hour is a reasonable starting point.
+ * Shared by `sentinel watch` (`src/cli/watch.ts`) and the replay engine
+ * (`src/replay/runner.ts`) so both exercise the same dwell behavior — a scenario
+ * result is only meaningful as "what would a real run have done" if it uses the same
+ * constants a real run does. Revisit via `docs/TUNING_LOG.md` once Phase 6 exists (it
+ * does now — see docs/PROGRESS.md's Known Issues for why threshold/dwell tuning still
+ * can't actually be *applied* yet). */
+export const DEFAULT_DWELL_SECONDS = 3600;
+
 /** Explainable decision log (spec §5.1, §8.1: "every transition writes a
  * DecisionRecord containing the inputs, detector outputs, the rule that fired, block
  * numbers, and the config hash"). Written on every `decide()` call, not just on a

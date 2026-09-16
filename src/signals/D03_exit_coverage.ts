@@ -85,7 +85,14 @@ export function createD03Detector(
         signals.push({
           detectorId: D03_ID,
           family: 'pool_flow',
-          subject: { kind: 'position', id: position.id },
+          // `market.marketId`, not `position.id` (the adapter's own `marketId:owner`
+          // shaped identity) — the risk engine's `decide()` matches a `kind:'position'`
+          // subject against its `positionId` input, which is the canonical
+          // `protocol:chain:market:asset` form (docs/adr/0002), the same string
+          // `src/core/pipeline.ts`'s `positionsForChain` uses for both `positionId`
+          // and `MarketContext.marketId` — using `position.id` here made this signal
+          // silently unreachable (found in the Phase 6 session; see docs/PROGRESS.md).
+          subject: { kind: 'position', id: market.marketId },
           severity,
           value: coverage,
           threshold: thresholds[severity],

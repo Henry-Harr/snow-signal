@@ -1,8 +1,12 @@
 #!/usr/bin/env node
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { Command } from 'commander';
 
 import { runDoctor } from './doctor.js';
 import { runLabel } from './label.js';
+import { runReplay } from './replay.js';
 import { runReport } from './report.js';
 import { runWatch } from './watch.js';
 import { createLogger } from '../core/logger.js';
@@ -101,8 +105,38 @@ program
     );
   });
 
+program
+  .command('replay')
+  .description('Replay scenarios against archived chain data and write docs/REPLAY_RESULTS.md (docs/SPEC.md #9)')
+  .argument('[scenarios...]', 'scenario YAML file paths (default: every file in scenarios/)')
+  .option('-c, --config <path>', 'path to config file', 'config/sentinel.yaml')
+  .option('--cache-dir <path>', 'disk cache directory for archive RPC responses', '.replay-cache')
+  .option('--out <path>', 'where to write the results markdown', 'docs/REPLAY_RESULTS.md')
+  .action(async (scenarioArgs: string[], opts: { config: string; cacheDir: string; out: string }) => {
+    const scenarioPaths =
+      scenarioArgs.length > 0
+        ? scenarioArgs
+        : readdirSync('scenarios')
+            .filter((f) => f.endsWith('.yaml'))
+            .map((f) => join('scenarios', f));
+
+    const { scenarioResults, syntheticResults, resultsPath } = await runReplay(scenarioPaths, {
+      configPath: opts.config,
+      cacheDir: opts.cacheDir,
+      resultsPath: opts.out,
+      logger,
+    });
+
+    for (const { scenario, score } of scenarioResults) {
+      console.log(`${scenario.id}: ${score.kind === 'incident' ? score.finalLevel : `${score.falseAlarmsPerWeek.toFixed(2)} false alarms/week`}`);
+    }
+    for (const result of syntheticResults) {
+      console.log(`${result.scenario.id}: ${result.passed ? 'PASS' : 'FAIL'}`);
+    }
+    console.log(`Results written to ${resultsPath}`);
+  });
+
 notYetImplemented('positions', 'Phase 2');
-notYetImplemented('replay', 'Phase 6');
 notYetImplemented('drill', 'Phase 7');
 notYetImplemented('kill', 'Phase 8');
 notYetImplemented('resume', 'Phase 8');
