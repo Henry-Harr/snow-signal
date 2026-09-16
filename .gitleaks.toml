@@ -1,0 +1,25 @@
+title = "Sentinel gitleaks config"
+
+# Start from gitleaks' maintained default ruleset (covers generic API keys, private
+# keys, common provider token formats, etc.) and layer a couple of project-specific
+# rules on top for things the generic rules might not catch.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "evm-private-key"
+description = "Raw 32-byte hex EVM private key"
+regex = '''(?i)(private[_-]?key|priv[_-]?key)\s*[:=]\s*["']?0x[a-f0-9]{64}["']?'''
+tags = ["key", "evm"]
+
+[[rules]]
+id = "bip39-seed-phrase"
+description = "Possible 12/24-word BIP-39 seed phrase in a single string"
+regex = '''(?i)(mnemonic|seed[_-]?phrase)\s*[:=]\s*["'][a-z]+(\s+[a-z]+){11,23}["']'''
+tags = ["secret", "seed-phrase"]
+
+[allowlist]
+paths = [
+  '''\.env\.example$''',
+  '''docs/.*''',
+]

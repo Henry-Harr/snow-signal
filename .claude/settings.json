@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/block-nonlocal-broadcast.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

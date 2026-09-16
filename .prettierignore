@@ -1,0 +1,10 @@
+dist
+node_modules
+reports
+coverage
+pnpm-lock.yaml
+.cache
+
+# Verbatim copy of the user-supplied build spec — must stay byte-identical to the
+# source document, never auto-reformatted.
+docs/SPEC.md

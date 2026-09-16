@@ -24,7 +24,7 @@ otherwise fire:
   mode. Both of those are decisions-by-inaction that spec §2 doesn't authorize.
 - The one exception is D16 itself: infra signals (including "quorum failed") never
   trigger an exit on their own (spec §8.1 invariant) — they can only ever make
-  Sentinel *more* vocal, never move money by themselves.
+  Sentinel _more_ vocal, never move money by themselves.
 
 ## Trade-off being accepted
 

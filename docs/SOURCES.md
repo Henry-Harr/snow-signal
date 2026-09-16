@@ -37,7 +37,7 @@ decision (adapter version selection, address book version pin, etc.).
     https://www.theblock.co/news/defi/2026-03-30-aave-v4-launches-ethereum-mainnet-395617 .
     **This needs first-session-of-Phase-2 re-verification**: confirm via
     `aave.com/docs/resources/changelog` and the deployed Pool's version-reporting
-    function which exact version each *watched* market runs before writing the v3
+    function which exact version each _watched_ market runs before writing the v3
     adapter's assumptions in stone. If a watched position turns out to be on an Aave v4
     market, spec §6.2 requires a v4 adapter behind the same `ProtocolAdapter` interface.
 
@@ -76,8 +76,8 @@ decision (adapter version selection, address book version pin, etc.).
   model — confirm which standard a given watched vault uses on-chain (its bytecode /
   factory) before assuming v1.1 shape.
 - Supply queue / withdraw queue / timelock behavior (v1.1): supply queue empty ⇒
-  deposits revert; Allocator can reorder supply queue without timelock; cap *increases*
-  are timelocked (24h–2w per curator config), cap *decreases* and queue removals (when
+  deposits revert; Allocator can reorder supply queue without timelock; cap _increases_
+  are timelocked (24h–2w per curator config), cap _decreases_ and queue removals (when
   the vault's supply in that market is already 0, or removal was previously submitted
   and timelock elapsed) are not. Source: search summary of
   https://docs.morpho.org/curate/concepts/security-considerations/ and

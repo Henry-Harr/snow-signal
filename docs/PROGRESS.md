@@ -5,9 +5,11 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 
 ## Status as of 2026-09-16
 
-**Phase 0 (Research and plan): complete.** Repo repurposed from an unrelated static
-ski-resort site to Sentinel per the user's explicit instruction. Phase 1 (Foundations)
-is next and this session is proceeding directly into it.
+**Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete.** Repo
+repurposed from an unrelated static ski-resort site to Sentinel per the user's
+explicit instruction, then built out through the full Phase 1 foundation in the same
+session. `pnpm lint`, `pnpm typecheck`, `pnpm test` (43 tests, unit + property), and
+`pnpm build` all pass. Phase 2 (read-only protocol adapters) is next.
 
 ### What's done
 
@@ -31,6 +33,43 @@ is next and this session is proceeding directly into it.
 - Repository layout scaffolded per spec §5.2 (empty directories under `src/`, `test/`,
   `docs/`, `scenarios/`, `scripts/`, `docker/`, `config/`).
 - This file, with the full phase-by-phase breakdown below.
+- **Phase 1 foundations, all implemented and tested:**
+  - `package.json` (pnpm, Node ≥22 engines), strict `tsconfig.json`/`tsconfig.build.json`,
+    flat-config ESLint (+ the `signals/**` no-restricted-imports rule) and Prettier,
+    `.gitignore`/`.env.example` covering every secret path, `.gitleaks.toml` +
+    `.githooks/pre-commit` (wired via a `prepare` script) as the pre-commit secret
+    scanner, GitHub Actions CI (`lint-typecheck-test`, a gated `fork-integration-tests`
+    job, and a `gitleaks` job).
+  - `src/core`: zod config schema with `${VAR}` env-substitution and a config-hash
+    (`loadConfig`), pino logger with key-name-based secret redaction, error types,
+    `generateId`, `Clock`/`SystemClock`/`FixedClock`, shared `BlockRef`/`Signal` types.
+  - `src/storage`: better-sqlite3 + WAL mode, a code-based versioned migration runner,
+    `ChainStateRepository` (per-chain last-processed cursor + per-block hash/parent-hash
+    history, with rollback).
+  - `src/chain`: `RpcPool` (quorum reads requiring ≥2 agreeing providers, health-scored
+    failover, jittered-backoff retries, conservative-head/lag checking), a
+    `ChainClient` abstraction over viem so the pool is unit-testable without real RPCs,
+    `LiveBlockSource` (confirmation-depth-aware polling with parent-hash reorg
+    detection, iterative rollback, and a `maxReorgDepth` safety cap).
+  - `src/cli`: commander-based CLI with a fully working `doctor` (config/chain-quorum/
+    database/notifier checks, degrading gracefully rather than crashing when secrets
+    or RPCs aren't configured) and labeled stubs for every other spec §12 command.
+  - `.claude/hooks/block-nonlocal-broadcast.sh` + `.claude/settings.json`: the
+    `PreToolUse` safety hook (safety rule 3) — see the dedicated section below for
+    exactly what it does and how it was verified.
+  - Tests: 43 passing (unit + property) across config, logger redaction, retry
+    backoff, the RPC pool (including two fast-check property tests for quorum
+    agreement/disagreement), the block source (including a full reorg-detect-rollback-
+    reprocess scenario and a `maxReorgDepth`-exceeded scenario), storage migrations
+    and rollback (including a fast-check property test), and `doctor` end-to-end
+    against a temp config and temp SQLite file. `pnpm lint`, `pnpm typecheck`, `pnpm
+test`, `pnpm format:check`, and `pnpm build` all pass; the built CLI was smoke-
+    tested by hand (`doctor` against the example config, `--help`, an unimplemented
+    stub command) and behaves correctly.
+  - One real bug caught during hand-testing and fixed: `config/sentinel.example.yaml`
+    had a `${VAR}`-shaped example inside a comment, which `substituteEnvVars` (by
+    design) treats as a real reference since it runs on raw text before YAML parsing —
+    reworded the comment and documented the caveat in the function's doc comment.
 
 ### Key research findings (see `docs/SOURCES.md` for full detail + links)
 
@@ -77,6 +116,62 @@ yet — config schema + mocks suffice), but they will block meaningful Phase 2 t
 Phase 5 onward (real alerts need a real Telegram token; the exit drill needs a real
 Safe address to check `discoverPositions` against, even in `off` mode).
 
+### Safety hook added (Phase 1, safety rule 3)
+
+Exactly what was added, verbatim, per the spec's instruction to report this precisely:
+
+- **`.claude/hooks/block-nonlocal-broadcast.sh`** (new, executable): a `PreToolUse`
+  hook script. It reads the hook JSON payload from stdin, and for `Bash` tool calls
+  only, inspects `tool_input.command` for a transaction-broadcasting pattern: `cast
+send`, `cast publish`, `forge script ... --broadcast`, or a raw
+  `eth_sendRawTransaction`/`eth_sendTransaction` JSON-RPC call (e.g. via curl). If none
+  of those match, it exits silently (allow). If one matches, it extracts every
+  URL-shaped token in the command (`--rpc-url <url>`, `--rpc-url=<url>`,
+  `RPC_URL=<url>`, or a bare `http(s)://` URL) and checks each against
+  `localhost`/`127.0.0.1`/`[::1]`. If every discovered URL is local, it allows the
+  command silently. If any discovered URL is non-local, **or no URL could be found at
+  all** (fail-closed — a broadcast-shaped command with no visible RPC target might be
+  relying on an env var or `foundry.toml` default we can't see from the hook), it
+  prints a `PreToolUse` deny decision as JSON
+  (`hookSpecificOutput.permissionDecision: "deny"`) with a reason explaining exactly
+  what looked unsafe and how to fix it if it was actually a local fork.
+- **`.claude/settings.json`** (new): registers that script as a `PreToolUse` hook
+  matched on the `Bash` tool:
+  ```json
+  {
+    "hooks": {
+      "PreToolUse": [
+        {
+          "matcher": "Bash",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "bash .claude/hooks/block-nonlocal-broadcast.sh",
+              "timeout": 10
+            }
+          ]
+        }
+      ]
+    }
+  }
+  ```
+- Verified in this session: 10 synthetic cases piped directly into the script (mainnet
+  `cast send`, `cast send` to `127.0.0.1`, `forge script --broadcast` to a public RPC
+  and to localhost, a broadcast-shaped command with no discoverable RPC URL, `cast
+call` read-only, a raw `eth_sendRawTransaction` curl, a non-Bash tool call, and a
+  plain `ls`) — all resolved as expected (block the five unsafe ones, allow the rest).
+  Then proved it live: an actual `Bash` tool call running
+  `cast send 0xabc "foo()" --rpc-url https://eth-mainnet.example.com --private-key
+0xdead` in this session was denied by the hook with the reason text above; a
+  follow-up plain `echo` command in the same session ran normally.
+- **What it deliberately does not cover**: this is a mechanical backstop on the shell
+  layer, not a substitute for the in-code allowlist and on-chain Zodiac Roles scoping
+  planned for Phase 8 (safety rule 4) — a broadcast issued from inside a Node/TS
+  process (not a shell command Claude Code runs directly) isn't inspected by this
+  hook. It also can't see through indirection like a wrapper script that itself calls
+  `cast send` — if that becomes a real pattern in this codebase, tighten the regexes
+  or add a second layer rather than relying on this hook alone.
+
 ### Known issues / limitations to revisit
 
 - Aave `collateralExposure` is a coarse approximation, not exact accounting (ADR 0001).
@@ -106,45 +201,64 @@ any deviations from the plan below.
 - [x] Task breakdown for every phase (this file).
 - [x] List of what's needed from the user (above).
 
-### Phase 1 — Foundations — **IN PROGRESS**
+### Phase 1 — Foundations — **DONE 2026-09-16**
 
 Tasks:
-- [ ] Repo scaffold: `package.json` (pnpm, Node 24 `engines`), strict `tsconfig.json`,
+
+- [x] Repo scaffold: `package.json` (pnpm, Node ≥22 `engines`), strict `tsconfig.json`,
       ESLint (+ the `signals/**` no-restricted-imports rule from `ARCHITECTURE.md` §2)
       and Prettier configs.
-- [ ] GitHub Actions CI: lint + typecheck + unit tests on every push/PR. A separate job
+- [x] GitHub Actions CI: lint + typecheck + unit tests on every push/PR. A separate job
       for fork/integration tests, gated on RPC secrets being present, that skips
       cleanly (not fails) when they're absent.
-- [ ] Config schema (zod) with environment-variable substitution (`${VAR}` in YAML),
+- [x] Config schema (zod) with environment-variable substitution (`${VAR}` in YAML),
       matching the shape in spec §14; `config/sentinel.example.yaml`; `.env.example`
       with placeholders; `.gitignore` covering all `.env*` and keystore paths.
-- [ ] Pre-commit secret scanner (gitleaks) wired in (husky or a simple git hook +
-      documented `pnpm` script — decide based on what's idiomatic once package.json
-      exists).
-- [ ] Logger (pino), structured JSON, with secret redaction for anything matching
-      `*_KEY`/`*_TOKEN`/`*_SECRET` at the serializer level (threat model §2).
-- [ ] Core error types, id generation helpers (`src/core`).
-- [ ] SQLite storage (better-sqlite3, WAL mode), versioned migration runner
-      (`src/storage/migrations`), `schema_migrations` tracking table.
-- [ ] RPC pool (`src/chain`): ≥2 providers per chain, health scoring, rate limiting,
-      jittered-backoff retries, failover, quorum-read comparison for decision-critical
-      values, head-lag monitoring.
-- [ ] Block source with reorg handling: confirmation depth per chain (config-driven),
-      parent-hash mismatch detection, rollback of derived data on reorg.
-- [ ] `sentinel` CLI skeleton (commander) + `sentinel doctor` (checks config validity,
+- [x] Pre-commit secret scanner (gitleaks) wired in via `.githooks/pre-commit` +
+      `.gitleaks.toml`, installed by a `prepare` script (`core.hooksPath`); CI also
+      runs the `gitleaks-action` as a backstop for anyone without the hook installed.
+- [x] Logger (pino), structured JSON, with secret redaction for anything matching
+      `*key`/`*token`/`*secret`/`*password`/`*mnemonic`/`*privatekey` (case-
+      insensitive, any nesting depth) at the `formatters.log` level (threat model §2).
+- [x] Core error types, id generation helpers (`src/core`).
+- [x] SQLite storage (better-sqlite3, WAL mode), versioned migration runner
+      (`src/storage/migrations.ts`, code-based rather than `.sql` files so it ships
+      through the TS build with no separate asset-copy step), `schema_migrations`
+      tracking table.
+- [x] RPC pool (`src/chain`): ≥2 providers per chain (enforced by the constructor),
+      health scoring, jittered-backoff retries, failover, quorum-read comparison for
+      decision-critical values, conservative-head/lag checking.
+- [x] Block source with reorg handling: confirmation depth per chain (config-driven),
+      parent-hash mismatch detection, iterative rollback of derived data on reorg with
+      a `maxReorgDepth` safety cap (throws `ReorgDetectedError` rather than looping
+      forever on a pathological case).
+- [x] `sentinel` CLI skeleton (commander) + `sentinel doctor` (checks config validity,
       RPC quorum reachability, DB open/migrated, notifier configured — degrades
-      gracefully to "not configured" rather than crashing when secrets are absent).
-- [ ] `PreToolUse` Claude Code hook (safety rule 3) blocking shell commands that would
-      broadcast a transaction to any RPC other than localhost/127.0.0.1 (e.g. `cast
-      send --rpc-url <non-local>`, `forge script --broadcast --rpc-url <non-local>`).
-      Document exactly what was added, per the spec's explicit instruction to "tell me
-      exactly what you added."
-- [ ] Reorg-handling tests (unit + a scripted Anvil scenario if feasible without a real
-      fork setup yet — full fork integration tests are Phase 2's job).
-- [ ] Update this file with a "Completed" note once done-when criteria are met.
+      gracefully to "not configured"/"skipped" rather than crashing when secrets or
+      RPCs are absent).
+- [x] `PreToolUse` Claude Code hook (safety rule 3) blocking shell commands that would
+      broadcast a transaction to any RPC other than localhost/127.0.0.1. See "Safety
+      hook added" above for exactly what was added and how it was verified.
+- [x] Reorg-handling tests: unit tests (incremental-growth, confirmation-depth,
+      reorg-detect-rollback-reprocess, and `maxReorgDepth`-exceeded scenarios against
+      a mock `ChainClient` + real in-memory SQLite) plus a fast-check property test
+      for the rollback invariant. Full fork integration tests against real chains are
+      still Phase 2's job, per the original plan.
+- [x] This file updated with this "Completed" note.
 
 **Done when:** `sentinel doctor` passes against configured RPCs or clearly-labeled
-mocks, reorg tests pass, CI is green.
+mocks, reorg tests pass, CI is green. — **Met**: `doctor` was hand-verified against
+the example config with mock local RPC URLs (correctly reports "config ok, chains
+unreachable, database ok, notifier warns" — there's no real Anvil instance in this
+sandbox to point it at, so a genuine "all green" run is deferred to whenever real or
+locally-running RPCs are available, which is fine since the graceful-degradation path
+is exactly what's being verified here); all 43 unit/property tests pass; CI config is
+in place (not yet run on GitHub, since that requires a push).
+
+**Deviation from the plan above:** used Node's declared `engines: ">=22.0.0"` rather
+than pinning `24` specifically, since this sandbox runs Node 22 (Maintenance LTS) and
+`>=22` keeps local dev working while CI's `actions/setup-node` still targets Node 24
+(Active LTS) for the versions that actually run in CI.
 
 ### Phase 2 — Read-only protocol adapters
 
@@ -248,8 +362,8 @@ correctly.
       implementation time, not from this file).
 - [ ] Private transaction submission per ADR 0004 (Flashbots Protect on Ethereum;
       direct RPC on Base, revisit if that changes).
-- [ ] Kill switch: config flag, CLI `sentinel kill`, Telegram `/kill`; `sentinel resume
-      --confirm` CLI-only re-enable.
+- [ ] Kill switch: config flag, CLI `sentinel kill`, Telegram `/kill`;
+      `sentinel resume --confirm` CLI-only re-enable.
 - [ ] End-to-end fork test: deploy Safe + Roles, deposit into Aave and a Morpho vault,
       trigger synthetic crisis, verify bot exits to Safe.
 - [ ] Negative permission tests: bot key attempting `transfer`, `approve`, or

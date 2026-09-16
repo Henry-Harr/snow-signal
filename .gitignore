@@ -1,0 +1,29 @@
+# Dependencies / build output
+node_modules/
+dist/
+coverage/
+
+# Secrets — never commit real env files or keystores (safety rule 1, docs/SPEC.md #2)
+.env
+.env.*
+!.env.example
+*.keystore
+*.key
+keystores/
+
+# Generated data — never commit (spec #3, #9)
+reports/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+test/replay/.cache/
+.replay-cache/
+
+# Editors / OS
+.DS_Store
+*.swp
+
+# Foundry
+cache/
+out/
+broadcast/*/31337/

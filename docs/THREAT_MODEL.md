@@ -18,6 +18,7 @@ private key/keystore → attacker can drain the bot key's gas balance, spoof ale
 (if execution is live) attempt withdrawals.
 
 **Mitigations:**
+
 - Bot private key is never a plaintext secret checked into the repo; it lives in an
   encrypted keystore or env var outside the repo (`.env*` and keystores are
   git-ignored; `.env.example` ships only placeholders). Phase 1.
@@ -41,6 +42,7 @@ private key/keystore → attacker can drain the bot key's gas balance, spoof ale
 the attacker otherwise compromising the host.
 
 **Mitigations:**
+
 - Pre-commit secret scanning (gitleaks) blocks committing anything that looks like a
   key. Phase 1.
 - Logger is configured to never log full config objects or anything under an env var
@@ -59,6 +61,7 @@ liquidity, oracle prices, or pause/freeze flags, trying to either suppress a rea
 or trigger a false withdrawal.
 
 **Mitigations:**
+
 - Quorum reads: every decision-critical value is read from ≥2 independent providers at
   the same block number and compared; mismatches raise an infra signal (D16) rather
   than silently trusting one answer. Phase 1/2.
@@ -81,13 +84,14 @@ commands (SIM-swap, session hijack, phished login).
 acting elsewhere, or `/ack`/`/mute` alerts to hide a real incident from the user.
 
 **Mitigations:**
+
 - Commands are only accepted from an explicit allowlist of chat IDs in config, checked
   server-side on every incoming update — not just "whoever has the bot token."
   Phase 5.
-- `/kill` can only ever *disable* execution — an attacker who takes over Telegram can
+- `/kill` can only ever _disable_ execution — an attacker who takes over Telegram can
   make Sentinel stop acting, which is the fail-safe direction, but can never use
-  Telegram alone to *enable* or expand execution. Re-enabling (`sentinel resume
-  --confirm`) is CLI-only, on the host, not reachable from Telegram at all. Phase 8.
+  Telegram alone to _enable_ or expand execution. Re-enabling (`sentinel resume
+--confirm`) is CLI-only, on the host, not reachable from Telegram at all. Phase 8.
 - `/ack` and `/mute` suppress notification noise, not the underlying `DecisionRecord`s
   or state transitions — the daily report and `sentinel status`/`sentinel positions`
   still show the true state regardless of acked/muted alerts, so a hidden alert doesn't
@@ -102,8 +106,9 @@ acting elsewhere, or `/ack`/`/mute` alerts to hide a real incident from the user
 secrets, tampers with detector logic, or rewrites transaction recipients.
 
 **Mitigations:**
+
 - Lockfile committed, CI installs with a frozen lockfile (`pnpm install
-  --frozen-lockfile`), so upgrades are an explicit, reviewed diff, not silent drift.
+--frozen-lockfile`), so upgrades are an explicit, reviewed diff, not silent drift.
   Phase 1.
 - `pnpm audit` (or equivalent) run as part of CI/Phase 9 dependency audit; findings
   triaged rather than ignored.

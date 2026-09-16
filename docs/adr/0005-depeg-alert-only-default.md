@@ -24,7 +24,7 @@ default, configured separately, and documented in an ADR (this one).
   its own explicit config flag separate from the general action policy, and get its
   own ADR at the time it's proposed (this ADR only covers "depeg does not trigger the
   standard withdrawal policy," not "swap features are pre-approved").
-- A depegged stablecoin sitting in a lending pool can still coincide with *other*
+- A depegged stablecoin sitting in a lending pool can still coincide with _other_
   detectors firing (e.g. D01 utilization spiking as everyone tries to exit that pool,
   or D11 bad debt appearing) — those detectors' own action policies still apply
   normally. This ADR only exempts the peg-deviation signal itself from being an

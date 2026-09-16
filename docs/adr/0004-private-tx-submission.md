@@ -28,7 +28,7 @@ Protect works on L1.
      liquidation would: there's no slippage to sandwich and no ordering-dependent
      value to extract from "Sentinel withdraws its own funds to its own Safe." The
      private-mempool requirement is much lower-stakes here than for, say, a DEX trade.
-  3. Base's Flashblocks pre-confirmations already reduce the *inclusion-time* risk
+  3. Base's Flashblocks pre-confirmations already reduce the _inclusion-time_ risk
      (the thing that matters most for an exit racing against a draining pool) even
      without a dedicated private-tx endpoint.
 

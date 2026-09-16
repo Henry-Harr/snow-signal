@@ -51,7 +51,7 @@ typecheck`, `pnpm test` all pass, and the current phase's acceptance criteria in
 - Detectors (`src/signals/**`) are pure: no I/O, no imports from `chain/`, `storage/`,
   or `notify/`. One file per detector, doc comment (purpose/inputs/formula/thresholds/
   false-positive sources), unit tests, and an entry in `docs/DETECTORS.md`.
-   every signal carries its evidence (raw values, block numbers, source IDs).
+  every signal carries its evidence (raw values, block numbers, source IDs).
 - Every protocol-specific fact (address, ABI, event name) is verified against an
   official source and recorded in `docs/SOURCES.md` or a code comment — never typed
   from memory.

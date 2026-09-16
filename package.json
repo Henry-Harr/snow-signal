@@ -1,0 +1,54 @@
+{
+  "name": "sentinel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sentinel: a DeFi stablecoin position watchdog for Aave v3, Morpho Blue, and Morpho vaults.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "bin": {
+    "sentinel": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "prepare": "bash scripts/install-git-hooks.sh",
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project unit --project property",
+    "test:watch": "vitest --project unit --project property",
+    "test:integration": "vitest run --project integration",
+    "sentinel": "tsx src/cli/index.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "commander": "^12.1.0",
+    "pino": "^9.5.0",
+    "prom-client": "^15.1.3",
+    "viem": "^2.21.54",
+    "yaml": "^2.6.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.10.2",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "fast-check": "^3.23.1",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.1",
+    "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  }
+}
