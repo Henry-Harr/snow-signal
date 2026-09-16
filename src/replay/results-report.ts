@@ -72,15 +72,27 @@ export function generateReplayResultsMarkdown(
   scores: ScenarioScore[],
   syntheticResults: SyntheticScenarioResult[],
   generatedAt: Date,
+  failures: { scenarioPath: string; error: string }[] = [],
 ): string {
   const incidents = scores.filter((s): s is Extract<ScenarioScore, { kind: 'incident' }> => s.kind === 'incident');
   const quiet = scores.filter((s): s is Extract<ScenarioScore, { kind: 'quiet' }> => s.kind === 'quiet');
+
+  const failuresSection =
+    failures.length > 0
+      ? [
+          '## Scenarios that failed to run',
+          '',
+          ...failures.map((f) => `- \`${f.scenarioPath}\`: ${f.error}`),
+          '',
+        ].join('\n')
+      : '';
 
   return [
     '# Replay results',
     '',
     `_Regenerated ${generatedAt.toISOString()} by \`sentinel replay\` (docs/SPEC.md §9.3) — regenerate whenever detectors or thresholds change, per that section's own instruction._`,
     '',
+    failuresSection,
     '## Incident scenarios',
     '',
     incidents.length > 0 ? incidents.map(incidentSection).join('\n') : '_None run._',

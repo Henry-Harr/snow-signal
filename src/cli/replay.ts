@@ -23,6 +23,11 @@ export interface RunReplayOptions {
 
 export interface RunReplayResult {
   scenarioResults: { scenario: ReplayScenario; result: ReplayRunResult; score: ScenarioScore }[];
+  /** Scenarios that failed to run — a network hiccup or a real archive-RPC
+   * limitation (docs/adr/0009) on one scenario must never discard every other
+   * scenario's already-completed results, so a failure here is recorded rather than
+   * thrown past this loop. */
+  failures: { scenarioPath: string; error: string }[];
   syntheticResults: SyntheticScenarioResult[];
   resultsPath: string;
 }
@@ -35,25 +40,31 @@ export async function runReplay(
   const logger = options.logger;
 
   const scenarioResults: RunReplayResult['scenarioResults'] = [];
+  const failures: RunReplayResult['failures'] = [];
   for (const path of scenarioPaths) {
-    const scenario = loadScenario(path);
-    const chainConfig = config.chains[scenario.chain];
-    if (!chainConfig) {
-      throw new Error(
-        `Scenario ${scenario.id}: chain "${scenario.chain}" is not configured in ${options.configPath}`,
-      );
-    }
-    const archiveRpcUrls = chainConfig.rpc.map((rpc) => rpc.url) as [string, string, ...string[]];
+    try {
+      const scenario = loadScenario(path);
+      const chainConfig = config.chains[scenario.chain];
+      if (!chainConfig) {
+        throw new Error(
+          `Scenario ${scenario.id}: chain "${scenario.chain}" is not configured in ${options.configPath}`,
+        );
+      }
+      const archiveRpcUrls = chainConfig.rpc.map((rpc) => rpc.url) as [string, string, ...string[]];
 
-    logger.info({ scenario: scenario.id }, 'running replay scenario');
-    const result = await runReplayScenario(scenario, {
-      archiveRpcUrls,
-      cacheDir: options.cacheDir,
-      policy: config.policy,
-      logger,
-    });
-    const score = scoreScenario(scenario, result);
-    scenarioResults.push({ scenario, result, score });
+      logger.info({ scenario: scenario.id }, 'running replay scenario');
+      const result = await runReplayScenario(scenario, {
+        archiveRpcUrls,
+        cacheDir: options.cacheDir,
+        policy: config.policy,
+        logger,
+      });
+      const score = scoreScenario(scenario, result);
+      scenarioResults.push({ scenario, result, score });
+    } catch (error) {
+      logger.error({ path, err: error }, 'scenario failed, continuing with the rest');
+      failures.push({ scenarioPath: path, error: error instanceof Error ? error.message : String(error) });
+    }
   }
 
   const syntheticResults = SYNTHETIC_SCENARIOS.map((scenario) =>
@@ -65,8 +76,9 @@ export async function runReplay(
     scenarioResults.map((r) => r.score),
     syntheticResults,
     now,
+    failures,
   );
   writeFileSync(options.resultsPath, markdown, 'utf-8');
 
-  return { scenarioResults, syntheticResults, resultsPath: options.resultsPath };
+  return { scenarioResults, failures, syntheticResults, resultsPath: options.resultsPath };
 }

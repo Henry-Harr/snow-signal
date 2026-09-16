@@ -120,7 +120,7 @@ program
             .filter((f) => f.endsWith('.yaml'))
             .map((f) => join('scenarios', f));
 
-    const { scenarioResults, syntheticResults, resultsPath } = await runReplay(scenarioPaths, {
+    const { scenarioResults, failures, syntheticResults, resultsPath } = await runReplay(scenarioPaths, {
       configPath: opts.config,
       cacheDir: opts.cacheDir,
       resultsPath: opts.out,
@@ -130,10 +130,14 @@ program
     for (const { scenario, score } of scenarioResults) {
       console.log(`${scenario.id}: ${score.kind === 'incident' ? score.finalLevel : `${score.falseAlarmsPerWeek.toFixed(2)} false alarms/week`}`);
     }
+    for (const failure of failures) {
+      console.error(`${failure.scenarioPath}: FAILED — ${failure.error}`);
+    }
     for (const result of syntheticResults) {
       console.log(`${result.scenario.id}: ${result.passed ? 'PASS' : 'FAIL'}`);
     }
     console.log(`Results written to ${resultsPath}`);
+    if (failures.length > 0) process.exitCode = 1;
   });
 
 notYetImplemented('positions', 'Phase 2');

@@ -50,12 +50,21 @@ before writing any replay code.
   live's existing behavior unchanged) — the replay runner sets it to the previous
   sampled block, so each step's fetch covers the full gap. This interacts with the
   already-known ~10-block `eth_getLogs` free-tier cap (`src/watchers/governance.ts`,
-  found in the Phase 3 session): a stride wider than ~10 blocks risks the RPC provider
-  silently truncating that fetch. Rather than build chunked fetching now (a real
-  side-project of its own), the runner logs a warning when a step's window exceeds 10
-  blocks, and scenarios needing accurate D05/D12/D13 coverage are expected to use a
-  small enough stride to stay under it — quiet-period scenarios, which don't need that
-  fidelity, can use a much larger stride and accept the gap.
+  found in the Phase 3 session): a stride wider than ~10 blocks risks the RPC
+  provider rejecting that fetch outright — confirmed for real running the full
+  scenario suite against live archive RPCs (Alchemy *and* Ankr both hard-error past
+  their own range cap, rather than silently truncating), which crashed the whole
+  multi-scenario run the first time it happened, discarding every already-completed
+  scenario's results. Rather than build chunked fetching now (a real side-project of
+  its own), the runner **clamps** `eventsFromBlock` to the last 9 blocks before the
+  current sample — Alchemy's actual limit, confirmed from its error response's own
+  suggested corrected range (`toBlock - fromBlock === 9`), not the rounder "10 block
+  range" wording in its error message's prose — (logging a warning each time) instead
+  of requesting the full gap —
+  scenarios needing accurate D05/D12/D13 coverage are expected to use a small enough
+  stride to stay under the cap in the first place; quiet-period scenarios, which don't
+  need that fidelity, can use a much larger stride and accept the resulting gap
+  without it ever becoming a hard failure.
 - **Scoring gaps stay honest, not fabricated.** "Gas that would have been spent" (spec
   §9.3) needs a real withdrawal planner with gas estimation, which doesn't exist until
   Phase 7. The replay scorer reports this field as `undefined`/"not available until

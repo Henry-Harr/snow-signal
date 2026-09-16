@@ -217,15 +217,28 @@ export async function runReplayScenario(
       const blocks = await blockSource.poll();
       if (blocks.length === 0) break;
       const at = blocks[0]!;
-      const eventsFromBlock = previousBlockNumber;
+      const fullGap = previousBlockNumber;
 
-      if (at.number - eventsFromBlock > 10n) {
+      // Clamp to the free-tier eth_getLogs range cap rather than just warning about
+      // it — a provider doesn't silently truncate an over-range query, it hard-errors
+      // (confirmed against real archive RPCs in the Phase 6 session: both configured
+      // providers rejected an over-range query outright), which would otherwise crash
+      // this scenario's whole run instead of degrading gracefully. `MAX_LOG_RANGE`
+      // (9) is Alchemy's actual limit, not its own error message's rounder "10 block
+      // range" wording — its error response's own suggested corrected range came back
+      // with `toBlock - fromBlock === 9` (a real Phase 6 finding, verified against the
+      // live error response, not the vendor's prose). This is the mechanism behind
+      // the known, documented D05/D12/D13 gap for wide-stride scenarios (ADR 0009's
+      // addendum) — clamping just makes that gap fail safe instead of failing loudly.
+      const MAX_LOG_RANGE = 9n;
+      const eventsFromBlock = at.number - fullGap > MAX_LOG_RANGE ? at.number - MAX_LOG_RANGE : fullGap;
+      if (at.number - fullGap > MAX_LOG_RANGE) {
         options.logger?.warn(
-          { scenario: scenario.id, from: eventsFromBlock.toString(), to: at.number.toString() },
-          'event fetch window exceeds the ~10-block free-tier eth_getLogs cap ' +
-            '(docs/PROGRESS.md, src/watchers/governance.ts) — large-holder/governance ' +
-            'events in this gap may be silently dropped by the RPC provider; use a ' +
-            'smaller sampleIntervalBlocks for scenarios where D05/D12/D13 fidelity matters',
+          { scenario: scenario.id, from: fullGap.toString(), to: at.number.toString() },
+          'event fetch window exceeds the free-tier eth_getLogs range cap ' +
+            '(docs/PROGRESS.md, src/watchers/governance.ts) — clamped to the last 9 ' +
+            'blocks; large-holder/governance events earlier in this gap are dropped. ' +
+            'Use a smaller sampleIntervalBlocks for scenarios where D05/D12/D13 fidelity matters',
         );
       }
 
