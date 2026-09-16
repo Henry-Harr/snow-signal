@@ -29,6 +29,24 @@ export const poolAbi = [
     outputs: [{ name: '', type: 'address' }],
   },
   {
+    // IPool.sol, verified directly on-chain 2026-09-16 (`cast call` against the
+    // real Ethereum Pool with a zero-position address, returning `healthFactor =
+    // type(uint256).max` — the documented "no debt" sentinel). Used by the
+    // large-holder watcher (docs/SPEC.md #6.6) to check top borrowers' health.
+    type: 'function',
+    name: 'getUserAccountData',
+    stateMutability: 'view',
+    inputs: [{ name: 'user', type: 'address' }],
+    outputs: [
+      { name: 'totalCollateralBase', type: 'uint256' },
+      { name: 'totalDebtBase', type: 'uint256' },
+      { name: 'availableBorrowsBase', type: 'uint256' },
+      { name: 'currentLiquidationThreshold', type: 'uint256' },
+      { name: 'ltv', type: 'uint256' },
+      { name: 'healthFactor', type: 'uint256' },
+    ],
+  },
+  {
     // "Send the value type(uint256).max in order to withdraw the whole aToken
     // balance" — the withdrawal planner's `'max'` amount (docs/SPEC.md #5.3) maps
     // directly to `2n ** 256n - 1n`, no separate "max" call needed.

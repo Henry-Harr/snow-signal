@@ -32,7 +32,7 @@ collateral risk cross-checking material for Phase 4's collateral detectors).
   source for an asset class Sentinel doesn't watch yet is exactly that.
 - **Skip DEX pricing entirely until more assets are configured**: rejected — `WETH` is
   already priced via Chainlink and used in collateral-risk reasoning (Phase 4), and
-  spec §6.5 explicitly wants an *independent* on-chain price alongside the oracle feed,
+  spec §6.5 explicitly wants an _independent_ on-chain price alongside the oracle feed,
   not just a second oracle read. Uniswap v3 TWAP is cheap to get right for the one
   asset that needs it now.
 

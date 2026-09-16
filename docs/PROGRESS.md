@@ -6,14 +6,14 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 ## Status as of 2026-09-16
 
 **Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete. Phase 2
-(read-only protocol adapters): complete. Phase 3 (prices and watchers): in progress** —
-price collection (Chainlink + CEX + Uniswap v3 DEX, aggregation, storage), the
-governance/config watcher, and the token-supply watcher are done; only the
-large-holder watcher is left before Phase 3 is complete. Repo repurposed from an
-unrelated static ski-resort site to Sentinel per the user's explicit instruction, then
-built out through the full Phase 1 foundation in the same session. `pnpm lint`, `pnpm
-typecheck`, `pnpm test` (156 tests, unit + property), `pnpm build`, and `pnpm
-test:integration` (40 fork/live tests against real Ethereum + Base data and real
+(read-only protocol adapters): complete. Phase 3 (prices and watchers): complete.**
+Price collection (Chainlink + CEX + Uniswap v3 DEX, aggregation, storage), the
+governance/config watcher, the token-supply watcher, and the large-holder watcher are
+all done — Phase 4 (detectors) is next. Repo repurposed from an unrelated static
+ski-resort site to Sentinel per the user's explicit instruction, then built out
+through the full Phase 1 foundation in the same session. `pnpm lint`, `pnpm
+typecheck`, `pnpm test` (174 tests, unit + property), `pnpm build`, and `pnpm
+test:integration` (44 fork/live tests against real Ethereum + Base data and real
 Coinbase/Kraken APIs) all pass.
 
 **Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
@@ -322,6 +322,7 @@ plus `src/prices/uniswap-v3-addresses.ts`. Covers `WETH` priced in `USDC` on bot
 Ethereum and Base, via `observe()`-based TWAP over a 900-second window (default,
 configurable). Every address was verified on-chain this session before being written
 down (safety rule 6) — see `docs/SOURCES.md`'s new "DEX prices — Uniswap v3" section:
+
 - The Uniswap v3 factory is at a **different** address on Base than on Ethereum
   (`0x33128a8f...` vs. `0x1F98431c...`) — found via `developers.uniswap.org`, then
   independently confirmed on-chain via `owner()`. Assuming the same address would have
@@ -350,6 +351,62 @@ down (safety rule 6) — see `docs/SOURCES.md`'s new "DEX prices — Uniswap v3"
   real Ethereum + Base fork data, both pools).
 
 Still open in Phase 3: large-holder watcher only.
+
+**Same session, continued: large-holder watcher — Phase 3 complete.** Built
+`src/watchers/large-holders.ts`, the last open Phase 3 item. Same collector/detector
+split as the other two watchers: this module fetches pool-flow events (Supply/
+Withdraw/Borrow/Repay for Aave and Morpho Blue; SupplyCollateral/WithdrawCollateral
+too for Morpho Blue; ERC-4626 Deposit/Withdraw for the MetaMorpho vault), reduces them
+into a per-holder balance ledger, and ranks top holders — deciding what counts as an
+alertable large-holder exit stays D05's job (Phase 4).
+
+- Event fetching reuses `fetchGovernanceEvents` from `governance.ts` unchanged (it was
+  already written protocol-agnostically — governance.ts's own header comment even
+  anticipated this reuse) via new target factories (`aavePoolFlowTarget`,
+  `morphoBluePoolFlowTarget`, `morphoVaultPoolFlowTarget`) that just pick a different
+  event subset from the same three ABIs the governance watcher reads. Re-exported
+  under `fetchPoolFlowEvents` for a domain-appropriate name at the call site.
+- `computeHolderLedger`/`rankHolders`: pure functions (same purity discipline as
+  `src/prices/aggregate.ts`), so the reduction/ranking logic is directly unit-testable
+  on synthetic event sequences without a mocked chain client. Protocol-specific
+  extractors (`extractAaveMovement`/`extractMorphoBlueMovement`/
+  `extractMorphoVaultMovement`) turn a raw `ProtocolEvent` into a signed balance
+  delta, since each protocol's events name the position owner differently (`onBehalfOf`
+  vs. `user` on Aave depending on the event; `onBehalf` uniformly on Morpho Blue;
+  `receiver`/`owner` on the vault's ERC-4626 events, matching that standard's own
+  inconsistent naming).
+- No new storage table — events are recorded via the existing
+  `ProtocolEventRepository.recordAll('large-holder', ...)` (the `protocol_events`
+  table's `WatcherCategory` type already anticipated this), and the ledger is derived
+  on demand by replaying stored events through `computeHolderLedger`, same as
+  `aggregate.ts` derives a price from stored quotes rather than a separately
+  maintained running total.
+- Added `getUserAccountData` to Aave's `poolAbi` (verified directly on-chain against a
+  synthetic zero-position address — returned the documented `healthFactor =
+type(uint256).max` "no debt" sentinel exactly) for `fetchAaveBorrowerHealth`, giving
+  the spec's "track the health of the largest borrowers" requirement for Aave
+  directly from Aave's own risk computation, not reimplemented. Morpho Blue's
+  equivalent (collateral value vs. `lltv`) is deliberately **not** built here —
+  deferred to D15 (Phase 4), which needs the same per-position health math across
+  every borrower in a market anyway, so building it once there avoids duplicating it
+  early.
+- Added ERC-4626 `Deposit`/`Withdraw` events for the vault via viem's own maintained
+  `erc4626Abi` (matching the adapter's existing policy of not redeclaring standard
+  interfaces) — verified against real logs on the live watched vault by computing each
+  event's topic hash and finding matching on-chain logs before writing any code
+  against them. Deliberately excludes `Transfer` (secondary-market share transfers
+  bypass Deposit/Withdraw entirely) — a known, documented gap, not an oversight.
+- Tests: 18 new unit tests (pure extractors/ledger/ranking on synthetic events, target
+  factories' event-set membership, `fetchAaveBorrowerHealth` including its
+  `QuorumError`-on-total-failure case) plus 4 fork integration tests (2 chains) that
+  run real Aave/Morpho Blue/vault events from a real 5-block window through the full
+  ledger/ranking pipeline and check invariants (ranking is descending, every ranked
+  holder has a positive balance), plus an exact-match check against a real
+  `getUserAccountData` call for a synthetic zero-position address. All pass. `pnpm
+lint`/`typecheck`/`test` (174 tests)/`format:check`/`build` all green; `pnpm
+test:integration` 44 tests green.
+
+**Phase 3 is now complete.** Next: Phase 4 (detectors D01–D16).
 
 ### What's done
 
@@ -693,11 +750,15 @@ governance.ts` + `protocol_events` table/`ProtocolEventRepository` (migration
       (category `'token-supply'`) rather than a new table. Only _records_ the raw
       series — deciding what counts as "large" is D08's job (Phase 4), not the
       collector's.
-- [ ] Large-holder watcher (top suppliers/borrowers per market/vault from event logs,
-      shares, recent movements; borrower health where computable).
+- [x] Large-holder watcher (top suppliers/borrowers per market/vault from event logs,
+      shares, recent movements; borrower health where computable). — **DONE
+      2026-09-16**: `src/watchers/large-holders.ts`, events stored via the existing
+      `protocol_events` table (category `'large-holder'`), ledger/ranking computed on
+      demand by pure functions. Aave borrower health via `getUserAccountData`; Morpho
+      Blue borrower health deferred to D15 (Phase 4) — see the session note above.
 
 **Done when:** unit and fork tests pass, raw quotes and events are stored and
-queryable.
+queryable. — **Met. Phase 3 complete.**
 
 ### Phase 4 — Detectors
 

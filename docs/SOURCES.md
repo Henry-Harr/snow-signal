@@ -298,7 +298,7 @@ pair key>:{c:[lastPrice, lastVolume], ...}}}` — Kraken keys its response by it
   `developers.uniswap.org/docs/protocols/v3/deployments/v3-base-deployments` (fetched
   2026-09-16) and then independently confirmed on-chain the same way (`owner()`
   returned a real address). Do not assume the Ethereum factory address carries over to
-  every chain — it does not here, only the *bytecode* is deterministic, not the
+  every chain — it does not here, only the _bytecode_ is deterministic, not the
   deployment address, when a chain's deployer used a different nonce/salt.
 - **`WETH`/`USDC` pool addresses and fee tiers**, both chains: resolved via
   `Factory.getPool(WETH, USDC, fee)` for all four standard fee tiers (0.01%/0.05%/0.3%/
@@ -318,6 +318,31 @@ pair key>:{c:[lastPrice, lastVolume], ...}}}` — Kraken keys its response by it
   - `observe()` (the TWAP read) and sufficient observation cardinality for a 900-second
     window confirmed callable on both pools via a direct `cast call` before any code
     was written against it.
+
+## Large-holder watcher (Phase 3, §6.6)
+
+- **`IPool.getUserAccountData(address)`**: signature pulled from
+  `raw.githubusercontent.com/aave-dao/aave-v3-origin/main/src/contracts/interfaces/IPool.sol`
+  (fetched 2026-09-16), then verified directly on-chain via `cast call` against the
+  real Ethereum Pool with a synthetic zero-position address (`0x00...01`) — returned
+  all-zero collateral/debt and `healthFactor = type(uint256).max`, matching the
+  interface doc's documented "no debt" sentinel exactly. Added to `poolAbi` in
+  `src/protocols/aave-v3/abi.ts`.
+- **ERC-4626 `Deposit`/`Withdraw` events** on the watched MetaMorpho vault: rather than
+  redeclare the standard interface (this file already avoids that for ERC-4626 reads —
+  see `morpho-vault/abi.ts`'s header comment), used viem's own maintained `erc4626Abi`
+  export directly. Verified its `Deposit`/`Withdraw` event signatures match the real
+  vault by computing each event's topic hash (`cast sig-event`) and finding real,
+  successfully-decoding logs for both on the live Base vault
+  (`0xeE8F4eC5672F09119b96Ab6fB59C27E1b7e44b61`) via `cast logs` over a real recent
+  block range (2026-09-16) — `Withdraw`'s 3-indexed-topic shape and `Deposit`'s
+  2-indexed-topic shape both matched what came back on-chain.
+- Aave's `Supply`/`Withdraw`/`Borrow`/`Repay` events and Morpho Blue's
+  `Supply`/`Withdraw`/`Borrow`/`Repay`/`SupplyCollateral`/`WithdrawCollateral` events
+  were already in `poolAbi`/`morphoBlueAbi` from Phase 2 (needed for
+  `decodeEvents`/position discovery) — no new verification needed, just a new
+  consumer (`src/watchers/large-holders.ts`) picking a different event subset than the
+  governance watcher does from the same ABIs.
 
 ## Runtime / tooling versions
 
