@@ -5,11 +5,13 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 
 ## Status as of 2026-09-16
 
-**Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete.** Repo
-repurposed from an unrelated static ski-resort site to Sentinel per the user's
-explicit instruction, then built out through the full Phase 1 foundation in the same
-session. `pnpm lint`, `pnpm typecheck`, `pnpm test` (43 tests, unit + property), and
-`pnpm build` all pass. Phase 2 (read-only protocol adapters) is next.
+**Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete. Phase 2
+(read-only protocol adapters): in progress — Aave v3 adapter done, Morpho Blue and
+Morpho vault adapters not started.** Repo repurposed from an unrelated static
+ski-resort site to Sentinel per the user's explicit instruction, then built out
+through the full Phase 1 foundation in the same session. `pnpm lint`, `pnpm
+typecheck`, `pnpm test` (58 tests, unit + property), `pnpm build`, and
+`pnpm test:integration` (10 fork tests against real Ethereum + Base data) all pass.
 
 **Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
 `lint`, `typecheck`, `test`, `build`) — all still pass; `doctor` degrades gracefully
@@ -33,6 +35,63 @@ from the Aave address-book repo and Morpho's GraphQL API this session, not memor
 green. Remaining open items: Telegram bot (question 3) and confirming local Foundry/
 Docker tooling (question 4) — see the open-questions section below for current status
 on each.
+
+**Same session, Phase 2 started:** installed Foundry locally (`foundryup`'s own
+installer hit a 403 on GitHub's attestation API from this sandbox — worked around by
+downloading the `v1.8.3` release tarball directly and putting `anvil`/`cast`/`forge` on
+`PATH` by hand; this is a fresh sandbox each session, so a future session may need to
+redo this — see `test/integration/README.md`). Verified it forks live chain state
+correctly. Then built the **Aave v3 protocol adapter** end to end:
+
+- `src/chain/client.ts`: added `ContractReadClient` (multicall + getLogs on top of the
+  existing narrow `ChainClient`) and `createViemContractReadClient`; made `RpcPool`
+  generic (`RpcPool<TClient>`) so it can pool either kind of client without touching
+  the block source's own tests.
+- `src/protocols/aave-v3/{abi,addresses,adapter}.ts`: reads reserve state, rates,
+  caps, frozen/paused flags, collateral params, oracle price (via
+  `ADDRESSES_PROVIDER()` → `getPriceOracle()`, resolved on-chain rather than
+  hardcoded, since only `POOL`/`AAVE_PROTOCOL_DATA_PROVIDER` were independently
+  re-verified this session), reserve deficit (bad debt), aToken balance/position
+  discovery, `collateralExposure` per the ADR 0001 approximation (enumerates every
+  listed reserve via `getReservesList()`), `withdrawable`, `buildWithdraw` (encodes
+  `Pool.withdraw`, including the `type(uint256).max` sentinel), and `decodeEvents`.
+  Every ABI fragment and address cited in `docs/SOURCES.md` with fetch dates, pulled
+  directly from `aave-dao/aave-v3-origin`/`aave-address-book` (raw GitHub) and
+  `aave.com`, not from memory (safety rule 6).
+- Added the shared `Position`/`MarketSnapshot`/`CollateralExposure`/`WithdrawEstimate`/
+  `TxRequest`/`ProtocolEvent`/`Log`/`ProtocolAdapter` types to `src/core/types.ts` per
+  spec §5.3, and an `AdapterError` to `src/core/errors.ts`.
+- 15 unit tests (`test/unit/protocols/aave-v3/adapter.test.ts`) against a mocked
+  `ContractReadClient`, covering normal/paused/frozen/empty-reserve snapshots, bad
+  debt, position discovery (present/absent), withdrawable liquidity capping, the
+  `collateralExposure` split (including the zero-total-supply edge case),
+  `buildWithdraw`'s calldata (including the max-withdraw sentinel), and event
+  normalization.
+- **Fork integration tests**, both Ethereum and Base
+  (`test/integration/protocols/aave-v3.test.ts`, 10 tests total): a new
+  `test/integration/helpers/anvil.ts` spawns a real local `anvil` fork pinned to a
+  specific block; the adapter's reads are asserted against independent direct `viem`
+  calls against that same fork. All 10 pass on real chain state.
+
+Two real bugs the fork tests caught (exactly what they're for):
+
+1. **Multicall3 not configured**: the custom `defineChain()` used for arbitrary RPC
+   URLs had no `contracts.multicall3` entry, so viem's `multicall()` action refused to
+   run at all. Fixed by adding the well-known Multicall3 address — cross-checked
+   against viem's own bundled `mainnet`/`base` chain definitions rather than typed
+   from memory, since it's identical on both.
+2. **Pinned block too old for the currently-live data provider**: the first pinned
+   block (21,500,000, roughly mid-2025) predates the `AAVE_PROTOCOL_DATA_PROVIDER`
+   proxy's current deployment — Aave's v3.7 Part 2 upgrade (2026-05-29,
+   `docs/SOURCES.md`) apparently redeployed it. Reads against that address at that
+   block returned `0x` ("no data"), not a revert with a reason, which briefly looked
+   like a wrong address before `cast code` at that block confirmed there was no
+   contract there yet. Fixed by pinning both chains' fork tests to a recent block
+   instead (a small safety margin behind current head at write time) —
+   `test/integration/README.md` documents the failure mode for next time.
+
+`pnpm lint`/`typecheck`/`test`/`format:check`/`build` all pass; fork integration tests
+pass on both chains against real RPC data.
 
 ### What's done
 
@@ -141,8 +200,8 @@ test`, `pnpm format:check`, and `pnpm build` all pass; the built CLI was smoke-
    - Morpho vault: Gauntlet USDC Prime (`gtUSDCp`) on Base, largest Base vault by TVL
      — still need to confirm on-chain it's v1.1-shaped, not Vault V2, before the vault
      adapter assumes a queue/role structure.
-   These are a sensible default watch list, not a claim about where the user actually
-   holds funds — replace in `config/sentinel.yaml` any time by editing `positions:`.
+     These are a sensible default watch list, not a claim about where the user actually
+     holds funds — replace in `config/sentinel.yaml` any time by editing `positions:`.
 
 Item 3 (no Telegram bot) and item 4 (local tooling unconfirmed) are the only remaining
 gaps. Item 3 blocks real alert delivery (Phase 5+) but nothing before that. Item 4
@@ -314,21 +373,28 @@ than pinning `24` specifically, since this sandbox runs Node 22 (Maintenance LTS
       cross-checking the actual Pool address's version on-chain. Plan: build the v3
       adapter first (definitely covers Base, and Ethereum Core/Lido), add a v4 adapter
       behind the same `ProtocolAdapter` interface only if a watched market needs it.
-- [ ] Aave v3 adapter: reserve state, rates, caps, frozen/paused, collateral params,
+- [x] Aave v3 adapter: reserve state, rates, caps, frozen/paused, collateral params,
       aToken balance, oracle prices, event decoding (Supply/Withdraw/Borrow/Repay/
       LiquidationCall + configurator events), reserve deficit read if version supports
-      it (ADR 0001 approximation for `collateralExposure`).
+      it (ADR 0001 approximation for `collateralExposure`). — **DONE 2026-09-16**:
+      `src/protocols/aave-v3/{abi,addresses,adapter}.ts`, 15 unit tests, 10 fork
+      integration tests (5 each on Ethereum + Base) all passing against real chain
+      data. See the session note above for exactly what shipped and the two bugs the
+      fork tests caught. `buildWithdraw` is implemented (pure calldata encoding,
+      nothing calls it for real yet) so Phase 7's planner has it ready.
 - [ ] Morpho Blue adapter: market state/params, oracle `price()` (verified scaling),
       supply position, event decoding including realized bad debt.
 - [ ] Morpho vault adapter: ERC-4626 state incl. `maxWithdraw`/`maxRedeem`, allocation
       (supply/withdraw queues + caps), roles, timelock + pending changes, event
       decoding; look-through exposure; vault withdrawable liquidity. Branch for Vault
       V2 shape if a watched vault uses it.
-- [ ] Fork integration tests (Ethereum + Base, pinned blocks) asserting adapter reads
-      match direct contract calls.
+- [x] Fork integration tests (Ethereum + Base, pinned blocks) asserting adapter reads
+      match direct contract calls. — **DONE for the Aave v3 adapter 2026-09-16**; still
+      needed for the two Morpho adapters once they exist.
 
 **Done when:** fork integration tests on Ethereum and Base match direct contract reads
-at pinned blocks.
+at pinned blocks. — **Met for Aave v3.** Not yet met for Morpho Blue/vault adapters,
+which don't exist yet — phase isn't complete until those do too.
 
 ### Phase 3 — Prices and watchers
 

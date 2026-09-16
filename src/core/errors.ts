@@ -33,3 +33,8 @@ export class ReorgDetectedError extends SentinelError {
 
 /** A migration failed to apply, or the database schema is in an unexpected state. */
 export class StorageError extends SentinelError {}
+
+/** A protocol adapter (src/protocols/**) couldn't resolve a market/asset, got a
+ * malformed or failing read back from chain, or a value failed its zod sanity check
+ * (docs/SPEC.md #6, "nothing external is trusted without a schema"). */
+export class AdapterError extends SentinelError {}

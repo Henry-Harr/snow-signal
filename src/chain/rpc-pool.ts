@@ -3,9 +3,9 @@ import { retryWithBackoff, type RetryOptions } from './retry.js';
 import { QuorumError, RpcError } from '../core/errors.js';
 import type { Logger } from '../core/logger.js';
 
-export interface NamedProvider {
+export interface NamedProvider<TClient extends ChainClient = ChainClient> {
   name: string;
-  client: ChainClient;
+  client: TClient;
 }
 
 interface HealthState {
@@ -32,11 +32,11 @@ function settleAll<R>(promises: Promise<R>[]): Promise<PromiseSettledResult<R>[]
  * confirmed by at least two providers at the same result before Sentinel trusts them
  * (docs/adr/0003).
  */
-export class RpcPool {
+export class RpcPool<TClient extends ChainClient = ChainClient> {
   private readonly health = new Map<string, HealthState>();
 
   constructor(
-    private readonly providers: NamedProvider[],
+    private readonly providers: NamedProvider<TClient>[],
     private readonly logger?: Logger,
     private readonly retryOptions: RetryOptions = DEFAULT_RETRY,
   ) {
@@ -54,7 +54,7 @@ export class RpcPool {
 
   /** Providers ordered healthiest-first: fewest consecutive failures, then lowest
    * last-observed latency. Used to pick a failover order, never to skip quorum. */
-  private orderedByHealth(): NamedProvider[] {
+  private orderedByHealth(): NamedProvider<TClient>[] {
     return [...this.providers].sort((a, b) => {
       const healthA = this.health.get(a.name)!;
       const healthB = this.health.get(b.name)!;
@@ -66,8 +66,8 @@ export class RpcPool {
   }
 
   private async callWithHealthTracking<T>(
-    provider: NamedProvider,
-    fn: (client: ChainClient) => Promise<T>,
+    provider: NamedProvider<TClient>,
+    fn: (client: TClient) => Promise<T>,
   ): Promise<T> {
     const start = Date.now();
     try {
@@ -93,7 +93,7 @@ export class RpcPool {
    * one on error. For reads that don't need cross-provider confirmation (e.g. polling
    * for a new head to decide *when* to look more closely — not a decision input by
    * itself). */
-  async bestEffortRead<T>(fn: (client: ChainClient) => Promise<T>): Promise<T> {
+  async bestEffortRead<T>(fn: (client: TClient) => Promise<T>): Promise<T> {
     let lastError: unknown;
     for (const provider of this.orderedByHealth()) {
       try {
@@ -117,7 +117,7 @@ export class RpcPool {
    * the successful providers disagree (docs/SPEC.md #6.1, docs/adr/0003).
    */
   async quorumRead<T>(
-    fn: (client: ChainClient) => Promise<T>,
+    fn: (client: TClient) => Promise<T>,
     isEqual: (a: T, b: T) => boolean = (a, b) => quorumEquals(a, b),
   ): Promise<T> {
     const results = await settleAll<{ provider: string; value: T }>(
