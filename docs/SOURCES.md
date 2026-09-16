@@ -281,6 +281,44 @@ pair key>:{c:[lastPrice, lastVolume], ...}}}` — Kraken keys its response by it
   yet added to `src/protocols/morpho-blue/abi.ts` until the governance watcher needed
   them.
 
+## DEX prices — Uniswap v3 (Phase 3, §6.5; see also ADR 0006)
+
+- **`WETH` token address on Ethereum**, `0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2`:
+  verified directly on-chain (2026-09-16) via `cast call ... "symbol()(string)"` and
+  `"totalSupply()(uint256)"` — both returned sane, expected values.
+- **`WETH` token address on Base**, `0x4200000000000000000000000000000000000006`:
+  Base's canonical predeploy address for wrapped ETH; verified directly on-chain
+  (2026-09-16) via `cast call ... "symbol()(string)"` (returned `"WETH"`) and
+  `"decimals()(uint8)"` (returned `18`).
+- **Uniswap v3 `Factory` address**, `0x1F98431c8aD98523631AE4a59f267346ea31F984` on
+  Ethereum: verified directly on-chain (2026-09-16) via `cast call ... "owner()(address)"`
+  (returned a real, non-zero address; a wrong address would revert or return garbage).
+  On Base, the factory deploys to a **different** address,
+  `0x33128a8fC17869897dcE68Ed026d694621f6FDfD` — found via
+  `developers.uniswap.org/docs/protocols/v3/deployments/v3-base-deployments` (fetched
+  2026-09-16) and then independently confirmed on-chain the same way (`owner()`
+  returned a real address). Do not assume the Ethereum factory address carries over to
+  every chain — it does not here, only the *bytecode* is deterministic, not the
+  deployment address, when a chain's deployer used a different nonce/salt.
+- **`WETH`/`USDC` pool addresses and fee tiers**, both chains: resolved via
+  `Factory.getPool(WETH, USDC, fee)` for all four standard fee tiers (0.01%/0.05%/0.3%/
+  1%) on each chain, then picked the tier with the highest `liquidity()` reading (all
+  verified directly via `cast call`, 2026-09-16):
+  - Ethereum: `0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640` (0.05% tier, deepest at
+    ~5.13e18 raw liquidity units, vs. ~4.61e17 at 0.01% and ~1.01e18 at 0.3%).
+  - Base: `0x6c561B446416E1A00E8E93E221854d6eA4171372` (0.3% tier, deepest at
+    ~3.15e19 raw liquidity units, vs. ~5.44e16 at 0.01%, ~1.51e18 at 0.05%, and
+    ~6.39e16 at 1%) — notably a **different** fee tier is deepest than on Ethereum, so
+    this was checked per chain rather than assumed to match.
+  - `token0`/`token1` order (which one the pool's tick prices in terms of the other)
+    also verified per pool via `cast call ... "token0()(address)"` — the two pools
+    have opposite ordering (`USDC` is `token0` on Ethereum, `WETH` is `token0` on
+    Base), recorded as `baseIsToken0` in `src/prices/uniswap-v3-addresses.ts` rather
+    than assumed consistent.
+  - `observe()` (the TWAP read) and sufficient observation cardinality for a 900-second
+    window confirmed callable on both pools via a direct `cast call` before any code
+    was written against it.
+
 ## Runtime / tooling versions
 
 - Node.js: Active LTS is **Node 24** as of 2026-09-15 (Node 22 is in Maintenance LTS,

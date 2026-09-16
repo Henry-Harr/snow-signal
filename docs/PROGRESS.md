@@ -7,13 +7,14 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 
 **Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete. Phase 2
 (read-only protocol adapters): complete. Phase 3 (prices and watchers): in progress** —
-price collection (Chainlink + CEX, aggregation, storage), the governance/config
-watcher, and the token-supply watcher are done; DEX price reads and the large-holder
-watcher are not started. Repo repurposed from an unrelated static ski-resort site to
-Sentinel per the user's explicit instruction, then built out through the full Phase 1
-foundation in the same session. `pnpm lint`, `pnpm typecheck`, `pnpm test` (145 tests,
-unit + property), `pnpm build`, and `pnpm test:integration` (36 fork/live tests
-against real Ethereum + Base data and real Coinbase/Kraken APIs) all pass.
+price collection (Chainlink + CEX + Uniswap v3 DEX, aggregation, storage), the
+governance/config watcher, and the token-supply watcher are done; only the
+large-holder watcher is left before Phase 3 is complete. Repo repurposed from an
+unrelated static ski-resort site to Sentinel per the user's explicit instruction, then
+built out through the full Phase 1 foundation in the same session. `pnpm lint`, `pnpm
+typecheck`, `pnpm test` (156 tests, unit + property), `pnpm build`, and `pnpm
+test:integration` (40 fork/live tests against real Ethereum + Base data and real
+Coinbase/Kraken APIs) all pass.
 
 **Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
 `lint`, `typecheck`, `test`, `build`) — all still pass; `doctor` degrades gracefully
@@ -313,7 +314,42 @@ Still open in Phase 3: DEX price reads, token supply watcher, large-holder watch
   `typecheck`/`test` (145 tests)/`format:check`/`build` all green;
   `pnpm test:integration` 36 tests green.
 
-Still open in Phase 3: DEX price reads, large-holder watcher.
+Still open in Phase 3: large-holder watcher.
+
+**Same session, continued: DEX price source (Uniswap v3 TWAP).** Pushed the
+token-supply watcher commit, then built `src/prices/uniswap-v3.ts` (`UniswapV3PriceSource`)
+plus `src/prices/uniswap-v3-addresses.ts`. Covers `WETH` priced in `USDC` on both
+Ethereum and Base, via `observe()`-based TWAP over a 900-second window (default,
+configurable). Every address was verified on-chain this session before being written
+down (safety rule 6) — see `docs/SOURCES.md`'s new "DEX prices — Uniswap v3" section:
+- The Uniswap v3 factory is at a **different** address on Base than on Ethereum
+  (`0x33128a8f...` vs. `0x1F98431c...`) — found via `developers.uniswap.org`, then
+  independently confirmed on-chain via `owner()`. Assuming the same address would have
+  silently broken (there's unrelated contract code at the Ethereum factory's address
+  on Base, so a naive port wouldn't even have reverted obviously — it would have
+  returned garbage from `getPool()`).
+- The deepest-liquidity fee tier for `WETH`/`USDC` is **not the same on both chains**:
+  0.05% on Ethereum, 0.3% on Base (checked all four standard tiers' `liquidity()` on
+  each chain rather than assuming one tier is universally deepest).
+- `token0`/`token1` order is opposite between the two pools (`USDC` is `token0` on
+  Ethereum, `WETH` is `token0` on Base) — handled via an explicit `baseIsToken0` flag
+  per pool rather than inferred from anything positional.
+- Quotes are denominated in `USDC`, not `USD` (unlike the Chainlink/CEX sources) —
+  documented in the source's own doc comment: composing an exact USD figure from a DEX
+  quote means also pulling the USDC/USD price and multiplying, which this source
+  deliberately doesn't do itself.
+- Wrote ADR 0006 scoping this to Uniswap v3 only for now (no Curve stable-pool source)
+  — `USDC` is the only stablecoin currently watched and its peg is already
+  cross-checked by Chainlink + 2 CEXes, and Curve's stable-pool design doesn't apply to
+  `WETH` at all (not a stablecoin). Revisit if a second stablecoin position is added.
+- Tests: 11 new unit tests (3 for the pure `averageTick`/`tickToPrice` math, 8 for
+  `UniswapV3PriceSource` against a mocked pool) plus 4 fork integration tests (2 per
+  chain) asserting the TWAP price lands in a plausible range and matches a direct
+  `observe()` call bit-for-bit. All pass. `pnpm lint`/`typecheck`/`test` (156 tests)/
+  `format:check`/`build` all green; `pnpm test:integration` 40 tests green (against
+  real Ethereum + Base fork data, both pools).
+
+Still open in Phase 3: large-holder watcher only.
 
 ### What's done
 
@@ -634,8 +670,10 @@ at pinned blocks. — **Met. Phase 2 complete.**
       `chainlink-addresses.ts`. Real, on-chain-verified feeds for USDC and WETH on
       Ethereum + Base. See the session note below for how the addresses were resolved
       and a decimals-decoding bug the fork tests caught.
-  - [ ] DEX price reads (Uniswap v3 TWAP via `observe()`, Curve stable pools) — not
-        started.
+  - [x] DEX price reads (Uniswap v3 TWAP via `observe()`) — **DONE 2026-09-16**:
+        `src/prices/uniswap-v3.ts` + `uniswap-v3-addresses.ts`, WETH/USDC on Ethereum +
+        Base, both pools on-chain-verified. Curve stable pools deliberately deferred —
+        see ADR 0006 and the session note below.
 - [x] CEX ticker polling (≥2 exchanges) — **DONE 2026-09-16**:
       `src/prices/cex.ts`, Coinbase + Kraken public ticker APIs, live-tested.
 - [x] Aggregation: median, outlier rejection, staleness detection per source; raw
