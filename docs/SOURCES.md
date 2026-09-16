@@ -80,12 +80,26 @@ maintained package at actual implementation time rather than copied from here.
   confirms the earlier search-derived paraphrase was correct — safe to use for D06/D07
   price-deviation math in Phase 2/4, cite this doc + fetch date in the code comment
   next to wherever the scaling constant is applied.
-- Contract addresses: could not confirm from this session whether Morpho Blue is
-  deployed to the same address on Ethereum and Base (CREATE2 determinism claimed by
-  some third-party sources, not confirmed against morpho-org's own deployment repo,
-  which 404'd for the specific path tried). **Open item for Phase 2**: pull addresses
-  from Morpho's official TS SDK / deployments package rather than hardcoding, if one
-  exists (`@morpho-org/blue-sdk` mentioned in search results — verify).
+- **Contract address, confirmed directly (2026-09-16)**: queried
+  `api.morpho.org/graphql` (a `markets` query, `morphoBlue.address` field) filtered to
+  `chainId_in: [1]` and separately `[8453]` — both returned
+  `0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb`. Morpho Blue **is** deployed to the same
+  address on Ethereum and Base (CREATE2-deterministic, as earlier third-party sources
+  claimed, now verified directly rather than trusted from search). Recorded in
+  `src/protocols/morpho-blue/addresses.ts`.
+- Full `IMorpho` interface (functions `market`, `idToMarketParams`, `position`,
+  `withdraw`; `MarketParams`/`Market`/`Position` struct field orders; `type Id is
+bytes32`), `EventsLib.sol`'s full event list (including `Liquidate`'s
+  `badDebtAssets`/`badDebtShares` — the direct on-chain signal for D11), `IOracle
+.price()`, and `IIrm.borrowRateView()` (borrow rate **per second, WAD-scaled**) all
+  **re-verified directly (2026-09-16)** against `raw.githubusercontent.com/morpho-org/
+morpho-blue/main/...` — recorded in `src/protocols/morpho-blue/abi.ts`.
+- **Virtual-shares conversion** (`SharesMathLib.sol`, verified 2026-09-16):
+  `VIRTUAL_SHARES = 1e6`, `VIRTUAL_ASSETS = 1`, added to both sides of every
+  shares<->assets conversion. `toAssetsDown(shares) = shares * (totalAssets + 1) /
+(totalShares + 1e6)`; `toSharesUp(assets) = ceil(assets * (totalShares + 1e6) /
+(totalAssets + 1))`. Used for position-balance conversion and the `buildWithdraw`
+  "max" estimate in `src/protocols/morpho-blue/adapter.ts`.
 
 ## Watched Morpho vault pick
 

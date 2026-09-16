@@ -6,12 +6,12 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 ## Status as of 2026-09-16
 
 **Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete. Phase 2
-(read-only protocol adapters): in progress — Aave v3 adapter done, Morpho Blue and
-Morpho vault adapters not started.** Repo repurposed from an unrelated static
+(read-only protocol adapters): in progress — Aave v3 and Morpho Blue adapters done,
+Morpho vault adapter not started.** Repo repurposed from an unrelated static
 ski-resort site to Sentinel per the user's explicit instruction, then built out
 through the full Phase 1 foundation in the same session. `pnpm lint`, `pnpm
-typecheck`, `pnpm test` (58 tests, unit + property), `pnpm build`, and
-`pnpm test:integration` (10 fork tests against real Ethereum + Base data) all pass.
+typecheck`, `pnpm test` (73 tests, unit + property), `pnpm build`, and
+`pnpm test:integration` (16 fork tests against real Ethereum + Base data) all pass.
 
 **Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
 `lint`, `typecheck`, `test`, `build`) — all still pass; `doctor` degrades gracefully
@@ -92,6 +92,45 @@ Two real bugs the fork tests caught (exactly what they're for):
 
 `pnpm lint`/`typecheck`/`test`/`format:check`/`build` all pass; fork integration tests
 pass on both chains against real RPC data.
+
+**Same session, continued — Morpho Blue adapter:** `src/protocols/morpho-blue/
+{abi,addresses,adapter}.ts`. Confirmed directly (not from search/memory) that Morpho
+Blue is deployed to the identical address on Ethereum and Base
+(`0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb`, via `api.morpho.org/graphql`), resolving
+the "could not confirm" flag an earlier session left in `docs/SOURCES.md`. Implements
+`market`/`idToMarketParams`/`position` reads, the oracle `price()` read (quorum, as
+it's decision-critical), an `IIrm.borrowRateView()` read to annualize the borrow rate
+(best-effort — not in spec #6.1's decision-critical list) plus a derived supply rate
+(borrow rate × utilization × (1 − fee), algebra from already-verified primitives, not
+a separate fact), the virtual-shares conversion for position balances (`SharesMathLib`,
+`VIRTUAL_SHARES=1e6`/`VIRTUAL_ASSETS=1`), the ADR-0001 exact `collateralExposure`
+(100% when a market has outstanding borrows, else 0%), `withdrawable`, `buildWithdraw`,
+and `decodeEvents`.
+
+One real design snag worth remembering: `buildWithdraw` is specified as synchronous
+(`ProtocolAdapter`), but Morpho's `withdraw()` needs the full `MarketParams` struct,
+not just the market id its keccak256 commits to — unlike Aave's `withdraw(asset,
+amount, to)`, there's no way to encode the call from an id alone. Solved with a small
+`marketCache` populated by every `market()`/`idToMarketParams()` read, so by the time
+a withdrawal is ever planned in the real pipeline (after a snapshot or a
+`withdrawable()` check), the params are already there.
+
+Another real bug the tests caught: initially declared `position()`'s ABI output as
+three separate named fields (mirroring Aave's `getReserveData` pattern), which is
+correct in isolation, but a direct fork call showed viem decodes that shape as a
+**positional tuple**, not a named object — differs from `market()`/`idToMarketParams()`
+(each a _single_ struct return, which viem _does_ decode to an object). Both encode to
+identical bytes on-chain (all fields are static-size), so this wasn't a wrong-values
+bug, just a wrong-JS-shape one that a naive `z.object(...)` schema would have silently
+mis-parsed. Fixed by switching `positionSchema` to a tuple and destructuring by
+position — documented inline so the next adapter (the vault one, same repo, same
+struct-decoding subtlety likely to recur) doesn't have to rediscover this.
+
+15 unit tests (mocked `ContractReadClient`) plus 6 fork integration tests against real
+Base state — including a real position discovery test against the user's own watched
+vault (Gauntlet USDC Prime) in a real market it allocates into (USDC/wstETH, found via
+a live query against the vault's on-chain allocation, not guessed). All pass.
+`pnpm lint`/`typecheck`/`test` (73 tests)/`format:check`/`build` all still green.
 
 ### What's done
 
@@ -382,15 +421,18 @@ than pinning `24` specifically, since this sandbox runs Node 22 (Maintenance LTS
       data. See the session note above for exactly what shipped and the two bugs the
       fork tests caught. `buildWithdraw` is implemented (pure calldata encoding,
       nothing calls it for real yet) so Phase 7's planner has it ready.
-- [ ] Morpho Blue adapter: market state/params, oracle `price()` (verified scaling),
-      supply position, event decoding including realized bad debt.
+- [x] Morpho Blue adapter: market state/params, oracle `price()` (verified scaling),
+      supply position, event decoding including realized bad debt. — **DONE
+      2026-09-16**: `src/protocols/morpho-blue/{abi,addresses,adapter}.ts`, 15 unit
+      tests, 6 fork integration tests (Base, against a real market and the user's own
+      watched vault's real position in it) all passing. See the session note above.
 - [ ] Morpho vault adapter: ERC-4626 state incl. `maxWithdraw`/`maxRedeem`, allocation
       (supply/withdraw queues + caps), roles, timelock + pending changes, event
       decoding; look-through exposure; vault withdrawable liquidity. Branch for Vault
       V2 shape if a watched vault uses it.
 - [x] Fork integration tests (Ethereum + Base, pinned blocks) asserting adapter reads
-      match direct contract calls. — **DONE for the Aave v3 adapter 2026-09-16**; still
-      needed for the two Morpho adapters once they exist.
+      match direct contract calls. — **DONE for Aave v3 (both chains) and Morpho Blue
+      (Base) 2026-09-16**; still needed for the Morpho vault adapter once it exists.
 
 **Done when:** fork integration tests on Ethereum and Base match direct contract reads
 at pinned blocks. — **Met for Aave v3.** Not yet met for Morpho Blue/vault adapters,
