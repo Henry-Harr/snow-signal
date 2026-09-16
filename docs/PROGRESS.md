@@ -5,11 +5,70 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 
 ## Status as of 2026-09-16
 
-**Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete.** Repo
-repurposed from an unrelated static ski-resort site to Sentinel per the user's
-explicit instruction, then built out through the full Phase 1 foundation in the same
-session. `pnpm lint`, `pnpm typecheck`, `pnpm test` (43 tests, unit + property), and
-`pnpm build` all pass. Phase 2 (read-only protocol adapters) is next.
+**Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete. Phase 2
+(read-only protocol adapters): functionally done, formally still open** — all three
+adapters are implemented and unit-tested (81 tests total, `pnpm lint`/`typecheck`/
+`test`/`build` all pass), but the phase's literal done-when criterion (fork
+integration tests matching real chain state) isn't met yet, blocked on real RPC
+access. PR #1 (repo repurpose + Phase 0 + Phase 1) merged to `main`; this work
+continues on a fresh `claude/new-session-7ks5xy` branch restarted from `main` per the
+merged-branch convention.
+
+### Phase 2 plan (written before coding, per project convention)
+
+**Scope decision:** real fork-integration tests ("adapters match direct contract
+reads at pinned blocks on Ethereum and Base") are **blocked** on real RPC access —
+still an open question from Phase 0 (see below), nobody has provided RPC URLs yet.
+Rather than block all of Phase 2 on that, this pass:
+
+1. Verifies every contract fact used (function/event signatures, struct layouts, the
+   Morpho market-id computation, the Morpho oracle 1e36 scaling) directly against the
+   official GitHub source for each protocol (`aave-dao/aave-v3-origin`,
+   `morpho-org/morpho-blue`, `morpho-org/metamorpho`) — not from memory, per safety
+   rule 6. Each ABI fragment cites its source file in a comment.
+2. Implements all three adapters (`AaveV3Adapter`, `MorphoBlueAdapter`,
+   `MorphoVaultAdapter`) against a minimal, explicitly-typed `AaveChainReader`-style
+   client interface (a thin wrapper the adapter needs: `multicall`, `readContract`,
+   `getLogs`) rather than importing `viem`'s full `PublicClient` type everywhere, so
+   each adapter is unit-testable against hand-built mock responses shaped like real
+   multicall results, without a real RPC.
+3. Adapters take their contract addresses via constructor parameters (not hardcoded,
+   not looked up internally) — deliberately deferring "how do we resolve the right
+   address for a configured market" (address-book wiring, config-driven address
+   resolution) to whichever later phase actually assembles the pipeline (Phase 5),
+   since that's a wiring concern, not an adapter-correctness concern.
+4. Unit tests stand in for fork integration tests for now: each adapter's read path is
+   tested against realistic mock multicall/log responses matching the real ABI shapes.
+   `test/integration/README.md` documents exactly what a real fork integration test
+   run needs (an archive RPC + Foundry) and defers to Phase 0's still-open question 1.
+5. Once real RPC URLs are available, add the actual fork integration tests (pinned
+   blocks on Ethereum + Base, comparing adapter output to direct `cast call`s) as a
+   follow-up — this is called out explicitly as **not yet done** rather than silently
+   skipped, since it's Phase 2's literal done-when criterion.
+
+**Risks:**
+
+- Base currency / price decimals for Aave's oracle aren't fixed by the interface (spec
+  says "1 ether for ETH, 1e8 for USD" depending on market config) — `collateralExposure`
+  sidesteps this by computing a _share_ (ratio), where the common base-currency-unit
+  scalar cancels out algebraically, so it never needs to assume 8 decimals. Anywhere an
+  absolute USD value is needed (future phases), the actual base currency unit must be
+  read from the deployed `AaveOracle`, not assumed.
+- `getReserveDeficit` (Aave v3.3+) will revert on pools running an older Aave version —
+  called defensively (`allowFailure: true` in that one multicall slot) so an
+  undeployed-yet function doesn't take down the whole snapshot.
+- Aave's real total-collateral-base exposure is approximated per ADR 0001; this phase
+  implements exactly that approximation, not exact per-borrower accounting.
+
+**Test plan:** unit tests per adapter covering: snapshot reads decode correctly from
+mocked multicall results (normal + a paused/frozen reserve + a pre-3.3 pool where
+`getReserveDeficit` reverts), `discoverPositions` filters to only nonzero balances,
+`collateralExposure` shares sum to 1 and weight by oracle-priced value not raw token
+amount, `withdrawable` caps at available liquidity, `buildWithdraw` encodes the right
+calldata for both a partial amount and `'max'`, and `decodeEvents` correctly classifies
+each event kind from raw logs. Property test: for `collateralExposure`, shares across
+all reserves in a market always sum to 1 (within floating-point tolerance) regardless
+of how many reserves or what their relative sizes are.
 
 ### What's done
 
@@ -70,6 +129,40 @@ test`, `pnpm format:check`, and `pnpm build` all pass; the built CLI was smoke-
     had a `${VAR}`-shaped example inside a comment, which `substituteEnvVars` (by
     design) treats as a real reference since it runs on raw text before YAML parsing —
     reworded the comment and documented the caveat in the function's doc comment.
+- **Phase 2 protocol adapters, implemented and unit-tested (fork integration tests
+  still pending real RPC access — see the Phase 2 section below):**
+  - `src/chain/contract-reader.ts`: a `ContractReader` interface (`multicall`,
+    `getLogs`) narrower than viem's full `PublicClient`, so adapters are unit-testable
+    against hand-built mock responses; `createViemContractReader` wraps a real viem
+    client for production use.
+  - `src/protocols/aave-v3/`: `AaveV3Adapter` — `discoverPositions` (enumerates every
+    reserve via `getReservesList`, keeps only nonzero aToken balances),
+    `snapshotMarkets`, `collateralExposure` (ADR 0001's approximation: reserves
+    weighted by oracle-priced value, defensively guarded for a missing/pre-3.3
+    `getReserveDeficit`), `withdrawable`, `buildWithdraw` (partial and the
+    `type(uint256).max` full-balance convention), `decodeEvents`.
+  - `src/protocols/morpho-blue/`: `MorphoBlueAdapter`, plus `market-id.ts`
+    reproducing Morpho's own `keccak256`-of-packed-struct market-id computation
+    exactly. Share-to-asset conversion uses the real `SharesMathLib` virtual-shares
+    formula, not an approximation — this matters since it feeds `buildWithdraw`'s
+    exact-full-position redemption path.
+  - `src/protocols/morpho-vaults/`: `MorphoVaultAdapter` (MetaMorpho v1.1 only, not
+    Vault V2) — look-through exposure and vault withdrawable liquidity, both
+    implemented via the same Morpho Blue market reads the Morpho Blue adapter uses
+    (a vault's allocation lives in Morpho Blue's own storage). `buildWithdraw`
+    currently only supports `'max'` (full redemption); a partial-amount ERC-4626
+    `withdraw()` path is deferred to Phase 7 (nothing needs it yet).
+  - Every ABI fragment cites its source file (a specific GitHub path, checked this
+    session) in a code comment, per safety rule 6 — see `docs/SOURCES.md`'s "Phase 2
+    verification" section for the consolidated list.
+  - 38 new tests (27 unit + 1 property, across the three adapters) using hand-built
+    mock `ContractReader` responses shaped like real multicall results, plus a shared
+    `encodeTestEventLog` fixture (viem 2.x has no single `encodeEventLog` export, only
+    `decodeEventLog`/`encodeEventTopics`) so `decodeEvents` tests round-trip through
+    real ABI encoding rather than hand-crafted hex.
+  - `test/integration/README.md`: documents exactly what's needed to add the real
+    fork integration tests once RPC access exists, so this gap is visible rather than
+    silently absent.
 
 ### Key research findings (see `docs/SOURCES.md` for full detail + links)
 
@@ -260,27 +353,52 @@ than pinning `24` specifically, since this sandbox runs Node 22 (Maintenance LTS
 `>=22` keeps local dev working while CI's `actions/setup-node` still targets Node 24
 (Active LTS) for the versions that actually run in CI.
 
-### Phase 2 — Read-only protocol adapters
+### Phase 2 — Read-only protocol adapters — **PARTIALLY DONE 2026-09-16 (see below)**
 
-- [ ] Re-verify Morpho oracle scaling and MetaMorpho v1.1 event names directly against
-      `docs.morpho.org` (blocked this session) before writing detector-facing math.
+- [x] Re-verify Morpho oracle scaling and MetaMorpho event names directly against
+      official source. `docs.morpho.org` itself was still unreachable this session,
+      but the primary contract source on GitHub (`morpho-org/morpho-blue`,
+      `morpho-org/metamorpho`) was — every fact was verified there instead, which is
+      arguably the more authoritative source anyway. See `docs/SOURCES.md`'s "Phase 2
+      verification" section.
 - [ ] Re-verify which Aave version(s) the actually-configured watched markets run
-      (v3.x vs v4) before assuming the v3 adapter covers them.
-- [ ] Aave v3 adapter: reserve state, rates, caps, frozen/paused, collateral params,
-      aToken balance, oracle prices, event decoding (Supply/Withdraw/Borrow/Repay/
-      LiquidationCall + configurator events), reserve deficit read if version supports
-      it (ADR 0001 approximation for `collateralExposure`).
-- [ ] Morpho Blue adapter: market state/params, oracle `price()` (verified scaling),
-      supply position, event decoding including realized bad debt.
-- [ ] Morpho vault adapter: ERC-4626 state incl. `maxWithdraw`/`maxRedeem`, allocation
-      (supply/withdraw queues + caps), roles, timelock + pending changes, event
-      decoding; look-through exposure; vault withdrawable liquidity. Branch for Vault
-      V2 shape if a watched vault uses it.
+      (v3.x vs v4) before assuming the v3 adapter covers them. **Still open** — no
+      specific watched markets are configured yet (open question 5), so there's
+      nothing concrete to check yet; revisit once the user names real markets.
+- [x] Aave v3 adapter (`src/protocols/aave-v3/`): reserve state, rates, caps,
+      frozen/paused, collateral params, aToken balance, oracle prices, event decoding
+      (Supply/Withdraw/Borrow/Repay/LiquidationCall), reserve deficit read guarded
+      against pre-3.3 pools (ADR 0001 approximation for `collateralExposure`).
+      Pool-configurator governance-change events are **not yet decoded** — that's
+      squarely Phase 3 watcher territory (config-change detection), not Phase 2
+      adapter territory, and is tracked there instead of duplicated here.
+- [x] Morpho Blue adapter (`src/protocols/morpho-blue/`): market state/params, oracle
+      `price()` (verified 1e36 scaling), supply position (via the exact
+      `SharesMathLib` virtual-shares formula, not an approximation), event decoding
+      including `Liquidate`'s bad debt fields.
+- [x] Morpho vault adapter (`src/protocols/morpho-vaults/`): ERC-4626 state incl.
+      `maxWithdraw` (not yet `maxRedeem` — not needed by anything built so far),
+      allocation (supply/withdraw queues + caps via `config(id)`), curator/guardian/
+      owner/timelock getters exist in the ABI but aren't yet read by adapter methods
+      (no caller needs them yet — Phase 3's governance watcher will); look-through
+      exposure and vault withdrawable liquidity are implemented. **Only MetaMorpho
+      v1.1 is supported** — a Morpho Vault V2 vault needs a structurally different
+      adapter variant, not assumed compatible (docs/SOURCES.md).
 - [ ] Fork integration tests (Ethereum + Base, pinned blocks) asserting adapter reads
-      match direct contract calls.
+      match direct contract calls. **Not done — this phase's literal done-when
+      criterion is unmet.** Blocked on real archive RPC access (open question 1) and
+      Foundry (not installed in this sandbox). See `test/integration/README.md` for
+      exactly what's needed and what the test should do once unblocked. Unit tests
+      against mocked `ContractReader` responses stand in for now (81 tests total,
+      38 of them new adapter tests, covering every adapter method including a
+      fast-check property test for `collateralExposure`'s share-sum invariant).
 
 **Done when:** fork integration tests on Ethereum and Base match direct contract reads
-at pinned blocks.
+at pinned blocks. **Not yet met** — see the fork-integration-tests item above. Treat
+Phase 2 as functionally complete (all three adapters implemented and unit-tested) but
+formally still open until that criterion is satisfied; resume here first once RPC
+access is available, rather than starting Phase 3 assuming Phase 2 is fully closed
+out.
 
 ### Phase 3 — Prices and watchers
 

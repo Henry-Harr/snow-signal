@@ -84,6 +84,49 @@ decision (adapter version selection, address book version pin, etc.).
   https://github.com/morpho-org/metamorpho — re-fetch directly once `docs.morpho.org`
   is reachable.
 
+## Phase 2 verification (2026-09-16)
+
+Every ABI fragment in `src/protocols/*/abi.ts` was checked directly against the raw
+GitHub source below on this date (not the earlier Phase 0 search-summary pass) — the
+file itself is the source cited in each ABI's own comment; this section is a summary,
+not the primary record.
+
+- **Aave v3**: `IPool.sol`, `IPoolDataProvider.sol`, `IPriceOracleGetter.sol` at
+  https://github.com/aave-dao/aave-v3-origin/tree/main/src/contracts/interfaces
+  (note the path is `src/contracts/interfaces/`, not `src/core/contracts/interfaces/`
+  as an initial guess assumed — the latter 404s). Confirmed: rates from
+  `getReserveData`/`getReserveConfigurationData` etc. are in RAY (1e27) and are
+  already-annualized values, not per-second; `getAssetPrice` returns a value in the
+  oracle's base-currency unit (documented as "1 ether for ETH, 1e8 for USD" — the
+  specific unit is a property of the deployed `AaveOracle`, not fixed by the
+  interface). `withdraw(asset, type(uint256).max, to)` is the documented convention
+  for withdrawing a full, continuously-accruing balance.
+- **Morpho Blue**: `IMorpho.sol`, `EventsLib.sol`, `MarketParamsLib.sol`,
+  `SharesMathLib.sol`, `IOracle.sol` at
+  https://github.com/morpho-org/morpho-blue/tree/main/src . Confirmed: the market id
+  is `keccak256` of the 160-byte in-memory encoding of `MarketParams` (equivalent to
+  `keccak256(abi.encode(loanToken, collateralToken, oracle, irm, lltv))` — implemented
+  in `src/protocols/morpho-blue/market-id.ts`); shares convert to assets via
+  `shares * (totalAssets + 1) / (totalShares + 1e6)` (the "virtual shares/assets"
+  offset that prevents share-inflation attacks) — implemented the same way in both the
+  Morpho Blue and Morpho vault adapters. `docs.morpho.org` was still unreachable this
+  session (egress-blocked), but the primary contract source on GitHub was not, so the
+  earlier Phase 0 "blocked" caveat on the 1e36 oracle scaling no longer applies — it's
+  now confirmed against `IOracle.sol`'s own NatSpec directly, not a search summary.
+- **MetaMorpho (v1.1)**: `IMetaMorpho.sol`, `PendingLib.sol`, `EventsLib.sol` at
+  https://github.com/morpho-org/metamorpho/tree/main/src . Confirmed struct layouts
+  for `MarketConfig` (`cap: uint184, enabled: bool, removableAt: uint64`),
+  `PendingUint192`, and `PendingAddress`. Look-through exposure and
+  vault-withdrawable-liquidity reads go through the same Morpho Blue `market()` /
+  `idToMarketParams()` / `position()` functions as the Morpho Blue adapter, since a
+  vault's allocation lives in Morpho Blue's own storage, not the vault's.
+- **Design note, not a protocol fact**: adapters (`AaveV3Adapter`, `MorphoBlueAdapter`,
+  `MorphoVaultAdapter`) take their contract addresses as constructor parameters rather
+  than resolving them internally from `@aave-dao/aave-address-book` or a Morpho
+  deployments list — that resolution is deferred to Phase 5 (pipeline assembly), so
+  Phase 2 doesn't need to add the address-book package as a runtime dependency yet.
+  See `docs/PROGRESS.md`'s Phase 2 plan for the reasoning.
+
 ## Safe
 
 - `@safe-global/protocol-kit` on npm, latest seen 8.0.6 (2026-09-15 search). Docs
