@@ -11,8 +11,12 @@ coverage/
 *.key
 keystores/
 
-# Generated data — never commit (spec #3, #9)
-reports/
+# Generated data — never commit (spec #3, #9). Anchored to the repo root (leading
+# slash) so it only matches the generated-report output directory, not any directory
+# literally named "reports" anywhere in the tree — an unanchored pattern here
+# previously (and silently) excluded src/reports/ and test/unit/reports/ from every
+# commit since Phase 5.
+/reports/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
