@@ -259,6 +259,28 @@ pair key>:{c:[lastPrice, lastVolume], ...}}}` — Kraken keys its response by it
   Both are unauthenticated and public; no API key needed. Recorded in
   `src/prices/cex.ts`.
 
+## Governance watcher (Phase 3, §6.6)
+
+- **Aave `PoolConfigurator` addresses, verified directly on-chain (2026-09-16)** via
+  `cast call` (`PoolAddressesProvider.getPoolConfigurator()`): Ethereum
+  `0x64b761D848206f447Fe2dd461b0c635Ec39EbB27`, Base
+  `0x5731a04B1E775f0fdd454Bf70f3335886e9A96be` — the Base value cross-confirms the
+  `POOL_CONFIGURATOR` constant already recorded from the address-book dump earlier
+  this session. `PoolConfigurator` isn't included as a static export the adapter
+  hardcodes (unlike `Pool`/`PoolDataProvider`); `src/watchers/governance.ts` resolves
+  it on-chain at read time instead.
+- **`eth_getLogs` range limit**: at least one configured RPC provider's free tier
+  (Alchemy) rejects `eth_getLogs` calls spanning more than 10 blocks, returning a
+  clear error naming the max allowed range. Confirmed directly by hitting it (a
+  6-block-plus query against Aave's `PoolConfigurator` failed until narrowed). Not a
+  Sentinel bug — a real operational constraint to design batch sizes around,
+  documented in `src/watchers/governance.ts`'s header comment.
+- Morpho Blue's remaining governance-level events (`SetOwner`, `SetFee`,
+  `SetFeeRecipient`, `EnableIrm`, `EnableLltv`) were already fetched directly from
+  `EventsLib.sol` earlier this session (see the Morpho Blue section above) — just not
+  yet added to `src/protocols/morpho-blue/abi.ts` until the governance watcher needed
+  them.
+
 ## Runtime / tooling versions
 
 - Node.js: Active LTS is **Node 24** as of 2026-09-15 (Node 22 is in Maintenance LTS,

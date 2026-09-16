@@ -7,13 +7,13 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 
 **Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete. Phase 2
 (read-only protocol adapters): complete. Phase 3 (prices and watchers): in progress** —
-price collection (Chainlink + CEX, aggregation, storage) done; DEX price reads and all
-three watchers (governance, token supply, large holders) not started. Repo repurposed
-from an unrelated static ski-resort site to Sentinel per the user's explicit
-instruction, then built out through the full Phase 1 foundation in the same session.
-`pnpm lint`, `pnpm typecheck`, `pnpm test` (124 tests, unit + property), `pnpm build`,
-and `pnpm test:integration` (30 fork/live tests against real Ethereum + Base data and
-real Coinbase/Kraken APIs) all pass.
+price collection (Chainlink + CEX, aggregation, storage) and the governance/config
+watcher are done; DEX price reads and the token-supply/large-holder watchers are not
+started. Repo repurposed from an unrelated static ski-resort site to Sentinel per the
+user's explicit instruction, then built out through the full Phase 1 foundation in the
+same session. `pnpm lint`, `pnpm typecheck`, `pnpm test` (137 tests, unit + property),
+`pnpm build`, and `pnpm test:integration` (34 fork/live tests against real Ethereum +
+Base data and real Coinbase/Kraken APIs) all pass.
 
 **Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
 `lint`, `typecheck`, `test`, `build`) — all still pass; `doctor` degrades gracefully
@@ -244,6 +244,52 @@ Interface` field is `uint256`/`int256`/`uint80` and viem decodes those to `bigin
 
 Still open in Phase 3: DEX price reads (Uniswap v3 TWAP / Curve), and all three
 watchers (governance/config, token supply, large holders).
+
+**Same session, continued — governance/config watcher:**
+
+- **`src/chain/client.ts`**: `LogQuery`/`getLogs` changed from a single `event` to an
+  `events: AbiEvent[]` array — viem decodes each returned log against whichever event
+  its topic0 matches and reports that event's own name, so watching several event
+  types on one contract (e.g. Aave's 6 configurator events) needs one `getLogs`
+  round-trip instead of one per event type. Verified directly against a real fork
+  call before committing to the design (real Aave `Pool` logs decoded correctly:
+  `Withdraw`/`Supply` in the same batch, each with the right `eventName`/`args`).
+  Nothing consumed the old shape yet, so this was a clean change, not a breaking one.
+- **`src/storage/migrations.ts` (migration 3) + `ProtocolEventRepository`**: an
+  append-only `protocol_events` table, `UNIQUE(chain_id, transaction_hash,
+log_index)` so re-scanning an overlapping block range (the normal way to poll for
+  new events) is a safe no-op rather than duplicating rows.
+- **`src/watchers/governance.ts`**: deliberately thin — every Phase 2 adapter already
+  decodes its own events (`ProtocolAdapter.decodeEvents`), so a "governance watch
+  target" is just _which_ contract address and _which subset_ of that protocol's
+  events count as governance (vs. pool-flow events like Supply/Withdraw, which the
+  not-yet-built large-holder watcher will care about instead), reusing the same
+  decode function either way. `fetchGovernanceEvents` itself ended up fully
+  protocol-agnostic as a result. Added factory helpers for all three protocols
+  (`aaveGovernanceTarget`, `morphoBlueGovernanceTarget`, `morphoVaultGovernanceTarget`)
+  — Aave's needed a new two-hop address resolution
+  (`resolveAaveConfiguratorAddress`, since `PoolConfigurator` isn't a static address
+  the way `Pool`/`PoolDataProvider` are), and Morpho Blue needed 5 governance-level
+  events (`SetOwner`, `SetFee`, `SetFeeRecipient`, `EnableIrm`, `EnableLltv`) added to
+  its ABI that Phase 2's read-only adapter never needed.
+- Real operational constraint found and documented (not a bug, just a fact worth
+  recording before it causes confusion later): **at least one configured RPC
+  provider's free tier caps `eth_getLogs` at a 10-block range per call** (Alchemy,
+  confirmed directly against the live RPC). Fine for polling new blocks as they
+  confirm in the live pipeline (normally a handful of blocks per tick); a real
+  constraint for any future full historical backfill, which will need explicit
+  chunking this function doesn't do itself. Documented in the watcher's own header
+  comment and `test/integration/README.md`-adjacent context.
+- Tests: 13 new unit tests (mocked pool/adapters) plus 4 fork integration tests —
+  resolving the _real_ Aave PoolConfigurator address on both Ethereum
+  (`0x64b761D848206f447Fe2dd461b0c635Ec39EbB27`) and Base
+  (`0x5731a04B1E775f0fdd454Bf70f3335886e9A96be`, cross-confirming the address-book
+  value already on record), and fetching real (small, free-tier-respecting) block
+  ranges for Aave + Morpho Blue on Ethereum and the real watched Morpho vault on
+  Base without error. All pass. `pnpm lint`/`typecheck`/`test` (137 tests)/
+  `format:check`/`build` all green; `pnpm test:integration` 34 tests green.
+
+Still open in Phase 3: DEX price reads, token supply watcher, large-holder watcher.
 
 ### What's done
 
@@ -572,9 +618,12 @@ at pinned blocks. — **Met. Phase 2 complete.**
       quotes stored with timestamps. — **DONE 2026-09-16**: `src/prices/aggregate.ts`
       (pure, matches the `src/signals/**` purity discipline) + `price_quotes` table/
       `PriceQuoteRepository` (migration 2, append-only, never overwritten).
-- [ ] Governance/config watcher (Aave configurator + executed governance payloads,
+- [x] Governance/config watcher (Aave configurator + executed governance payloads,
       Morpho vault timelocked submissions/role changes, new collateral listings,
-      oracle changes, pauses/freezes).
+      oracle changes, pauses/freezes). — **DONE 2026-09-16**: `src/watchers/
+governance.ts` + `protocol_events` table/`ProtocolEventRepository` (migration
+      3). Reuses each Phase 2 adapter's own `decodeEvents` rather than duplicating
+      decoding logic — see the session note below.
 - [ ] Token supply watcher (`totalSupply` changes, large/bridge mints) for every
       collateral asset in the exposure graph.
 - [ ] Large-holder watcher (top suppliers/borrowers per market/vault from event logs,

@@ -176,6 +176,33 @@ export const morphoBlueAbi = [
       { name: 'marketParams', ...marketParamsTuple, indexed: false },
     ],
   },
+  // Protocol-owner-level governance events (EventsLib.sol, verified 2026-09-16) — not
+  // needed for Phase 2's read-only market state, but needed for the governance
+  // watcher (Phase 3, docs/SPEC.md #6.6).
+  {
+    type: 'event',
+    name: 'SetOwner',
+    inputs: [{ name: 'newOwner', type: 'address', indexed: true }],
+  },
+  {
+    type: 'event',
+    name: 'SetFee',
+    inputs: [
+      { name: 'id', type: 'bytes32', indexed: true },
+      { name: 'newFee', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'SetFeeRecipient',
+    inputs: [{ name: 'newFeeRecipient', type: 'address', indexed: true }],
+  },
+  { type: 'event', name: 'EnableIrm', inputs: [{ name: 'irm', type: 'address', indexed: true }] },
+  {
+    type: 'event',
+    name: 'EnableLltv',
+    inputs: [{ name: 'lltv', type: 'uint256', indexed: false }],
+  },
 ] as const;
 
 /** `price()` returns the price of 1 collateral-token asset quoted in loan-token

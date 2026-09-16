@@ -65,6 +65,35 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 3,
+    name: 'protocol_events',
+    up: (db) => {
+      db.exec(`
+        -- Decoded protocol events from every watcher (docs/SPEC.md #6.6), reusing
+        -- each adapter's own decodeEvents() — one row per on-chain event, never
+        -- overwritten. The UNIQUE constraint makes re-scanning an overlapping block
+        -- range (the normal, safe way to poll for new events) idempotent rather than
+        -- duplicating rows.
+        CREATE TABLE protocol_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          category TEXT NOT NULL,
+          protocol TEXT NOT NULL,
+          chain_id INTEGER NOT NULL,
+          market_id TEXT NOT NULL,
+          event_name TEXT NOT NULL,
+          block_number TEXT NOT NULL,
+          transaction_hash TEXT NOT NULL,
+          log_index INTEGER NOT NULL,
+          args TEXT NOT NULL,
+          UNIQUE (chain_id, transaction_hash, log_index)
+        );
+
+        CREATE INDEX idx_protocol_events_market
+          ON protocol_events (market_id, block_number DESC);
+      `);
+    },
+  },
 ];
 
 function ensureMigrationsTable(db: SentinelDatabase): void {

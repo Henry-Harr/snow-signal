@@ -186,6 +186,19 @@ export const poolAddressesProviderAbi = [
     inputs: [],
     outputs: [{ name: '', type: 'address' }],
   },
+  {
+    // Verified 2026-09-16 via a live `cast call` against both watched markets'
+    // AddressesProvider contracts — Ethereum resolved to
+    // 0x64b761D848206f447Fe2dd461b0c635Ec39EbB27, Base to
+    // 0x5731a04B1E775f0fdd454Bf70f3335886e9A96be (the latter matching the
+    // `POOL_CONFIGURATOR` constant already recorded in the address-book dump in
+    // docs/SOURCES.md, cross-confirming both).
+    type: 'function',
+    name: 'getPoolConfigurator',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
 ] as const;
 
 /** `getAssetPrice` returns a price in the oracle's base-currency units — for the

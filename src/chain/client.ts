@@ -63,7 +63,11 @@ export type ContractCallResult =
 
 export interface LogQuery {
   address: `0x${string}` | `0x${string}`[];
-  event: AbiEvent;
+  /** One or more event ABIs to match in a single call — viem decodes each returned
+   * log against whichever event its topic0 matches and reports that event's own name
+   * (`DecodedLog.eventName`), so a watcher covering several governance event types on
+   * one contract needs only one `getLogs` round-trip instead of one per event. */
+  events: AbiEvent[];
   fromBlock: bigint;
   toBlock: bigint;
 }
@@ -129,7 +133,7 @@ export function createViemContractReadClient(url: string, chainId: number): Cont
     getLogs: async (query) => {
       const logs = await client.getLogs({
         address: query.address,
-        event: query.event,
+        events: query.events,
         fromBlock: query.fromBlock,
         toBlock: query.toBlock,
       });
@@ -138,7 +142,7 @@ export function createViemContractReadClient(url: string, chainId: number): Cont
         blockNumber: log.blockNumber,
         transactionHash: log.transactionHash,
         logIndex: log.logIndex,
-        eventName: query.event.name,
+        eventName: (log as unknown as { eventName: string }).eventName,
         args: (log as unknown as { args: Record<string, unknown> }).args,
       }));
     },
