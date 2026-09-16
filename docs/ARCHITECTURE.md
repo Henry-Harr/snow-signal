@@ -25,7 +25,9 @@ recommendation computed as part of the same decision
   ▼
 Alert dispatch                                              [src/notify]
   ├──▶ Notifier (Telegram, Discord, console)
-  └──▶ (Phase 7/8: paper/live withdrawal execution, not built yet)
+  └──▶ Paper executor (Phase 7, off by default — execution.mode: paper)
+         plan → fork-simulate → record, never signs           [src/actions]
+       (Phase 8: live execution, gated behind Zodiac Roles, not built yet)
   │
   ▼
 Reports, decision log                                       [src/reports]
@@ -101,14 +103,27 @@ and should not be re-derived from memory; re-read the spec section.
 
 ## 6. Actions
 
-The action planner is one code path across all three execution modes (`off`, `paper`,
-`live`); only the last stage (does it actually sign and send) differs. `off` logs the
-plan. `paper` runs the exact same plan through an Anvil-fork simulation. `live` (gated
-behind Phase 8 completion and the user's own per-chain config flag) additionally
-requires the Safe + Zodiac Roles permission scoping described in spec §8.4, an
-allowlist check in code (recipient must be the configured Safe), and a pre-send
-simulation against the latest block that must show exactly "position down, Safe up by
-the expected amount" or the send is aborted.
+The withdrawal planner (`src/actions/planner.ts`, Phase 7) is one pure function
+shared across every execution mode — given the current campaign state (persisted,
+`withdrawal_campaigns`) and real withdrawable liquidity, it decides the next step and
+priority fee; it never loops or blocks itself, since "retry on every new block" is
+just the pipeline calling it again on the next confirmed block. Only the last stage
+(does it actually sign and send) differs by mode. `off` (the default) logs the plan
+only. `paper` (Phase 7, built) runs the exact same plan through an Anvil-fork
+simulation (`src/actions/{simulator,paper-executor}.ts`) that impersonates the Safe
+and never signs anything, verifying both "the Safe's balance went up" and "the
+position went down" by the expected amount before recording the outcome
+(`paper_executions`, append-only). `live` (Phase 8, not built) additionally requires
+the Safe + Zodiac Roles permission scoping described in spec §8.4, an allowlist check
+in code (recipient must be the configured Safe), and a pre-send simulation against
+the latest block that must show exactly "position down, Safe up by the expected
+amount" or the send is aborted — the same bar the paper executor already enforces,
+just with a real signature at the end instead of a fork.
+
+The daily exit drill (`src/actions/exit-drill.ts`, Phase 7) reuses the paper executor
+directly rather than a separate code path: it forks the latest block and forces a
+`full_exit` plan+simulate for every configured position, against a throwaway
+in-memory campaign store so a drill run never touches a real in-progress campaign.
 
 ## 7. Storage
 

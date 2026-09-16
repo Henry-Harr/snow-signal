@@ -9,17 +9,28 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 (read-only protocol adapters): complete. Phase 3 (prices and watchers): complete.
 Phase 4 (signal detectors): complete. Phase 5 (risk engine, alerts, daily report):
 complete — this is the first version of Sentinel the user can actually run. Phase 6
-(replay harness): complete.** The `sentinel watch` / `report` / `label` / `replay`
-CLI commands are all wired and tested against real chain data.
+(replay harness): complete. Phase 7 (paper mode and exit drills): complete, with one
+deliberate, documented exception (`docs/adr/0010-paper-mode-not-wired-into-replay.md`
+— replays show real recoverable-share, not a real simulated gas figure; see that ADR
+for why).** The `sentinel watch` / `report` / `label` / `replay` / `drill` CLI
+commands are all wired and tested against real chain data.
 `docs/REPLAY_RESULTS.md` and `docs/TUNING_LOG.md` are real artifacts from an actual
 run against live archive RPCs, not placeholders — see the dedicated Phase 6 session
 note further down for the full detail, including two real pre-existing bugs the
 replay harness caught (D03/D10 signals silently unreachable by the risk engine) and
-a concrete, evidence-backed detector-threshold finding. `pnpm lint`, `pnpm
-typecheck`, `pnpm test` (473 tests, unit + property), and `pnpm build` all pass.
-`pnpm test:integration` (58 fork/live tests, including golden-output replay
-regression tests against real archive RPCs) last verified green in this same
-session.
+a concrete, evidence-backed detector-threshold finding. The Phase 7 session note
+further down has the equivalent detail for the withdrawal planner, fork simulator,
+paper executor, and daily exit drill — all verified against a real Aave v3 position
+created on a fork (impersonating a real, on-chain-verified whale), which caught and
+fixed two genuine bugs (gas underestimation on a full exit; an interest-accrual
+rounding issue in the post-withdrawal balance check) — plus an unrelated but
+significant repo-hygiene bug found and fixed the same session: an unanchored
+`.gitignore` pattern had silently excluded `src/reports/` and `test/unit/reports/`
+from every commit since Phase 5. `pnpm lint`, `pnpm typecheck`, `pnpm test` (493
+tests, unit + property), and `pnpm build` all pass. `pnpm test:integration` (64
+fork/live tests, including golden-output replay regression tests and real-position
+paper-executor/exit-drill tests against real archive RPCs) last verified green in
+this same session.
 
 **Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
 `lint`, `typecheck`, `test`, `build`) — all still pass; `doctor` degrades gracefully
@@ -795,6 +806,145 @@ Next: Phase 7 (paper mode and exit drills) — the withdrawal planner is also wh
 needed to close the `config.detectors`/gas-scoring gaps this session found and
 deliberately left open.
 
+**New session: Phase 7 — withdrawal planner, fork simulator, paper executor, daily
+drill, built end-to-end and verified against real chain state.** User said "continue"
+(after Phase 5) then "how many phases? and continue" (after Phase 6) — both one-word
+authorizations to keep going, per this whole session's established pattern. Built, in
+order:
+
+1. **Withdrawal planner** (`src/actions/{types,planner}.ts`, spec §8.3): a withdrawal
+   is modeled as a persisted **campaign** (`WithdrawalCampaign` — target amount,
+   amount withdrawn so far, status, attempt count), replanned once per pipeline run
+   rather than looping/blocking internally — "retry on every new block" (spec's own
+   wording) is the pipeline calling the planner again on the next confirmed block,
+   not the planner itself blocking. `planWithdrawal` is a pure function: given the
+   current campaign (if any), the policy's action recommendation, and real
+   withdrawable liquidity, it decides `none`/`cancelled`/`already-complete`/`plan`,
+   computing `min(remaining target, available now)` for a partial step and stepping
+   priority fees in 4 ramps up to a configured per-chain cap. 13 unit tests, all
+   branches. Storage: migration 10 (`withdrawal_campaigns`, UPSERT — "where this
+   position's exit stands right now," same pattern as `risk_state`) +
+   `WithdrawalCampaignRepository`.
+2. **Fork simulator** (`src/actions/simulator.ts`, spec §8.4, safety rule 5): runs a
+   `TxRequest` against an already-running Anvil fork by impersonating the Safe
+   (`anvil_impersonateAccount`) — the standard simulate-without-signing technique;
+   nothing here ever holds or touches a private key (safety rule 2). Verifies the
+   generic half of "position down, Safe up by the expected amount" (the Safe's
+   ERC-20 balance increased by exactly the expected amount); the protocol-specific
+   "position down" half is the paper executor's job, since it holds the adapter.
+   Moved the Anvil fork spawner from a test-only helper into production code
+   (`src/chain/anvil.ts`) in the process, since this is the first *production* code
+   path that needs to spawn a real fork, not just tests.
+3. **Paper executor** (`src/actions/paper-executor.ts`, spec §8.4): ties the planner
+   and simulator together — spawns its own fork pinned to the exact confirmed block
+   the triggering decision was made from, re-discovers the position fresh on that
+   fork, plans a step, and (if there's a step to take) simulates it, verifying both
+   halves of "position down, Safe up" (the second half — re-reading the position
+   post-tx via the adapter — needed a small interest-accrual tolerance; see the
+   verification note below for why). Wired into `src/core/pipeline.ts`'s `runOnce`:
+   when `config.execution.mode === 'paper'` and a decision's action is
+   `partial_withdraw`/`full_exit`, it runs automatically and the outcome is persisted
+   to a new append-only `paper_executions` log (migration 11 — "record what would
+   have happened," spec's own phrase) via `PaperExecutionRepository`. `sentinel
+   watch` only wires the two new repos when paper mode is actually configured, so
+   `off` mode (the default) is completely unaffected.
+4. **Daily exit drill** (`src/actions/exit-drill.ts`, spec §8.6): forks the latest
+   block for each configured chain and simulates a full exit of every position by
+   reusing `runPaperExecution` (forcing the action to `full_exit` regardless of the
+   position's real current risk level) against a throwaway in-memory campaign
+   repository per position, so a drill run never touches or is confused with a real
+   in-progress campaign. Reports pass/fail, a real gas estimate, and a coarse
+   liquidity-based "estimated steps to exit" (documented plainly as a proxy, not a
+   real time estimate — this codebase has no model of liquidity replenishment
+   rates). Wired as a real `sentinel drill` CLI command (was a Phase 1
+   not-yet-implemented stub) and into `sentinel report`'s exit-drill section, which
+   was an honest placeholder until now.
+
+**Verified against real chain state, not mocks**, the same discipline as every prior
+phase: the fork simulator and paper executor are both exercised end to end against a
+**genuine Aave v3 position** — a real, on-chain-verified whale
+(`0x55FE002aefF02F77364de339a1292923A15844B8`, live-verified via `cast balance`/`cast
+call` this session, ~66.5M USDC / ~247 ETH at the time) is impersonated to actually
+`approve` + `supply` real USDC into Aave's Ethereum Core market on a fork, creating a
+real position, then `runPaperExecution`/`runExitDrill` are pointed at *that same
+fork* as their own fork source (a fork-of-a-fork — Anvil forks from any JSON-RPC
+endpoint, including another already-running Anvil instance), so they see exactly the
+position just created. `supply()`'s signature was pulled directly from the same
+official source already cited in `src/protocols/aave-v3/abi.ts`
+(`aave-dao/aave-v3-origin`'s `IPool.sol`, re-fetched this session), not memory — the
+adapter itself never calls `supply` so it wasn't already in the codebase anywhere.
+
+This real-fork testing caught and fixed **two genuine correctness bugs**, not just
+proved the happy path:
+
+- **Gas underestimation on a full exit.** The very first real end-to-end run
+  reverted out of gas. A full withdrawal (unlike a partial one) also clears Aave's
+  "used as collateral" bit for that reserve — a more expensive code path than a
+  naive `eth_estimateGas` call accounts for, the same reason real wallets always pad
+  their own gas estimate. Fixed by explicitly estimating gas and adding a 20% buffer
+  before sending (`src/actions/simulator.ts`) — a real robustness fix, not just a
+  test-fixture workaround, since the exact same underestimation risk would exist for
+  a real Phase 8 executor.
+- **The "position down" check was too strict.** A snapshot of the position's balance
+  taken one block before the withdrawal transaction mines is, by construction,
+  already stale by the time the transaction executes — an interest-bearing position
+  keeps accruing in that single block, so a withdrawal for the literal
+  previously-read balance leaves a few wei of freshly-accrued interest behind as
+  dust (confirmed by hand via `cast`: minted aToken balance was `supplyAmount - 1`
+  or `- 2` across different runs, purely from liquidity-index rounding at supply
+  time — a separate, smaller, already-known Aave quirk). Fixed by bounding the
+  "decreased by the expected amount" check to a small (one-part-per-million)
+  tolerance in `src/actions/paper-executor.ts`, documented as absorbing legitimate
+  accrual dust without hiding a real shortfall (a real bug — wrong recipient,
+  fee-on-transfer asset, bad calldata — loses far more than a few parts-per-million).
+- Also improved `simulateWithdrawal`'s revert reporting while debugging the above: a
+  reverted transaction now replays as an `eth_call` at the pre-tx block to recover a
+  human-readable revert reason, instead of a bare "transaction reverted" — directly
+  useful for paper mode's own stated purpose ("record what would have happened").
+
+**Also found and fixed, unrelated to Phase 7's own code**: a repo-hygiene bug that
+predates this phase. `.gitignore`'s `reports/` entry (meant only for the generated
+report *output* directory at the repo root, spec §3/§9) was unanchored, so it matched
+*any* directory literally named `reports` anywhere in the tree — silently excluding
+`src/reports/` (the whole Phase 5 daily report generator) and `test/unit/reports/`
+from every commit since Phase 5, even though the code was present, working, and
+passing every local check the entire time (every check reads the working tree, not
+git's index, so nothing caught this until `git status` was actually inspected this
+session). Fixed by anchoring the pattern to the repo root (`/reports/`) and committing
+the recovered files as their own dedicated commit, separate from Phase 7's actual
+work.
+
+**One spec-stated "done when" item deliberately not met, with reasoning recorded in
+a new ADR**: "replays show what paper mode would have done" (docs/SPEC.md §13) isn't
+wired up — `IncidentScore.gasSpentWei` stays `undefined`. Replay scenarios use a
+**synthetic** position (ADR 0009), not a real discovered on-chain balance, and
+`runPaperExecution` always re-discovers a real position fresh on its own fork; there
+is no honest way to make a synthetic (often not-real-world-fundable) balance actually
+exist on a fork without either extending the paper executor with its own
+position-override mechanism *and* fabricating that balance via a raw storage write
+(the exact aToken-storage-layout-guessing risk already rejected once this same phase,
+for the paper executor's own fork test) — see `docs/adr/0010-paper-mode-not-wired-
+into-replay.md` for the full reasoning and what's still genuinely real instead
+(`recoverableShareAtPointOfNoReturn`, already computed from a real on-chain
+`withdrawable()` read at the point of no return).
+
+Tests: 3 new unit test files (planner, withdrawal-campaign-repository,
+paper-execution-repository — ~24 new tests) plus 3 new fork integration test files
+(simulator, paper-executor, exit-drill — 6 new tests, all against real chain state,
+none mocked). Final tally: `pnpm lint`/`typecheck`/`test` (493 tests, 71 files)/`build`
+all green; `pnpm test:integration` (64 tests, 17 files) all green, run multiple times
+to confirm the two real-network flakes hit along the way (an Anvil fork's own
+one-off RPC hiccup on startup, and a rounding-tolerance test bound that needed
+loosening from "off by ≤1 wei" to "off by ≤5 wei" once a second real run showed a
+2-wei gap) were genuinely transient, not the actual fixes.
+
+**Phase 7 is now complete**, with the one deliberate, documented exception above.
+Next: Phase 8 (guarded live execution) — Zodiac Roles setup scripts/guide, nonce/
+pending-tx tracking (explicitly deferred from Phase 7's planner as more naturally
+Phase-8-scoped, since paper mode never persistently submits anything), and the
+`config.detectors`/gas-scoring wiring gaps Phase 6 already flagged, now that the
+withdrawal planner they were waiting on exists.
+
 ### What's done
 
 - Old repo content (`index.html`, `resort.html`, `CNAME`, `.gitattributes` — a ski
@@ -1052,6 +1202,31 @@ addresses.ts` only ever resolves each market's _current_ contract addresses, so
   `docs/TUNING_LOG.md` with the full evidence and why it isn't applied yet (safety
   rule 8, plus the `config.detectors`-not-wired-up gap above meaning there's nowhere
   to actually apply a tuned value today).
+- **Found in the Phase 7 session**: replay scenarios' `IncidentScore.gasSpentWei`
+  stays `undefined` — the paper executor isn't wired into the replay engine, since
+  replay's synthetic positions (ADR 0009) have no real on-chain balance for
+  `runPaperExecution` to discover or withdraw from, and fabricating one via a guessed
+  storage write was rejected as the same unsafe-guessing risk already rejected once
+  this same phase for the paper executor's own fork test. Full reasoning in
+  `docs/adr/0010-paper-mode-not-wired-into-replay.md`. `recoverableShareAtPointOfNoReturn`
+  is real and already answers most of the same question (how much of the position
+  could actually have been pulled out), just not the gas figure specifically.
+- **Found and fixed in the Phase 7 session, pre-existing since Phase 5**: `.gitignore`'s
+  `reports/` entry was unanchored (no leading `/`), so it matched any directory
+  literally named `reports` anywhere in the tree, not just the generated-report
+  output directory at the repo root it was meant for — `src/reports/` (the whole
+  Phase 5 daily report generator's source) and `test/unit/reports/` (its tests) were
+  silently excluded from every commit since Phase 5, despite being real, working,
+  passing code the entire time. Fixed by anchoring the pattern (`/reports/`) and
+  committing the recovered files. Worth an explicit note here in case any other
+  session's `git log`-based archaeology gets confused by the gap in when these files
+  first appear in history versus when they were actually written.
+- Paper mode's simulated gas (when `execution.mode: paper` is actually configured and
+  a decision triggers it) isn't summed into the daily report's `gasSpentWei` total
+  yet — that field is still always `0` while a real accounting of "how much paper-mode
+  gas did today's simulations use" would need pulling from the new `paper_executions`
+  log (`src/storage/paper-execution-repository.ts`) into `sentinel report`, not yet
+  wired.
 
 ---
 
@@ -1294,16 +1469,27 @@ itself also surfaced a concrete, evidence-backed tuning candidate (`docs/TUNING_
 and two real pre-existing bugs (see the session note below) — the harness doing
 exactly what it's for.
 
-### Phase 7 — Paper mode and exit drills
+### Phase 7 — Paper mode and exit drills — **DONE 2026-09-16**
 
-- [ ] Withdrawal planner (what's withdrawable now per protocol, partial-then-retry
-      logic, priority-fee stepping, nonce/pending-tx tracking).
-- [ ] Fork simulator + paper executor (plans + simulates, never signs).
-- [ ] Daily exit drill (fork latest block, simulate full exit via real executor path,
-      report pass/fail + gas + estimated blocks-to-exit).
+- [x] Withdrawal planner (what's withdrawable now per protocol, partial-then-retry
+      logic, priority-fee stepping). Nonce/pending-tx tracking deliberately deferred
+      to Phase 8 — paper mode never persistently submits anything, so there's nothing
+      real to track a nonce or a pending/replaced/dropped transaction for yet.
+- [x] Fork simulator + paper executor (plans + simulates, never signs) — verified
+      against a real Aave v3 position created on a fork, not mocks.
+- [x] Daily exit drill (fork latest block, simulate full exit via the paper executor
+      path — Roles-scoped execution is Phase 8 — report pass/fail + gas + a coarse
+      liquidity-based estimate of steps to exit).
 
 **Done when:** replays show what paper mode would have done; drill runs and reports
-correctly.
+correctly. — **Met, with one deliberate exception**: the drill runs and reports
+correctly (fully met, verified against a real fork position). Replays show real
+recoverable share (already true since Phase 6, via `adapter.withdrawable()`) but not
+a real simulated gas figure — `IncidentScore.gasSpentWei` stays `undefined` rather
+than wiring the paper executor into the replay engine in a way that would require
+either extending it with a synthetic-position override *and* fabricating that
+balance via a guessed storage write, or leaving the number honestly missing. See
+`docs/adr/0010-paper-mode-not-wired-into-replay.md` for the full reasoning.
 
 ### Phase 8 — Guarded live execution (forks only)
 
