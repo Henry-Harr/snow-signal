@@ -1,5 +1,6 @@
 import { erc20Abi } from 'viem';
 
+import { runExitDrill } from '../actions/exit-drill.js';
 import { createViemContractReadClient, type ContractReadClient } from '../chain/client.js';
 import { RpcPool } from '../chain/rpc-pool.js';
 import { SystemClock, type Clock } from '../core/clock.js';
@@ -274,6 +275,13 @@ export async function runReport(options: ReportOptions): Promise<ReportResult> {
     if (summary) positions.push(summary);
   }
 
+  let exitDrillResults: DailyReportInput['exitDrillResults'] = [];
+  try {
+    exitDrillResults = await runExitDrill({ config, clock, logger });
+  } catch (error) {
+    logger.warn({ err: error }, 'exit drill failed, omitting its results from the report');
+  }
+
   const dataQuality: DataQualitySummary[] = Object.values(config.chains).map((chainConfig) => ({
     chainId: chainConfig.chainId,
     providerUptime: undefined, // not yet tracked as a running counter — see docs/PROGRESS.md
@@ -289,7 +297,7 @@ export async function runReport(options: ReportOptions): Promise<ReportResult> {
     decisions,
     labels,
     dataQuality,
-    exitDrillResults: [], // Phase 7 (withdrawal planner) — see generateDailyReport's doc comment
+    exitDrillResults,
     gasSpentWei: 0n, // execution mode is always 'off' in Phase 5
   };
 

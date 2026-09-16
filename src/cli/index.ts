@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { Command } from 'commander';
 
 import { runDoctor } from './doctor.js';
+import { runDrillCommand } from './drill.js';
 import { runLabel } from './label.js';
 import { runReplay } from './replay.js';
 import { runReport } from './report.js';
@@ -149,8 +150,31 @@ program
     },
   );
 
+program
+  .command('drill')
+  .description(
+    'Fork the latest block and simulate a full exit of every position (docs/SPEC.md §8.6)',
+  )
+  .option('-c, --config <path>', 'path to config file', 'config/sentinel.yaml')
+  .action(async (opts: { config: string }) => {
+    const results = await runDrillCommand({ configPath: opts.config, logger });
+    if (results.length === 0) {
+      console.log('No positions currently held — nothing to drill.');
+      return;
+    }
+    let anyFailed = false;
+    for (const r of results) {
+      const status = r.passed ? 'PASS' : 'FAIL';
+      const gas = r.gasEstimate !== undefined ? r.gasEstimate.toString() : 'n/a';
+      const blocks =
+        r.estimatedBlocksToExit !== undefined ? r.estimatedBlocksToExit.toString() : 'unknown';
+      console.log(`[${status}] ${r.positionId} — gas: ${gas}, estimated steps to exit: ${blocks}`);
+      if (!r.passed) anyFailed = true;
+    }
+    process.exitCode = anyFailed ? 1 : 0;
+  });
+
 notYetImplemented('positions', 'Phase 2');
-notYetImplemented('drill', 'Phase 7');
 notYetImplemented('kill', 'Phase 8');
 notYetImplemented('resume', 'Phase 8');
 
