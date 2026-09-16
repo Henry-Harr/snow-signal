@@ -221,6 +221,44 @@ morpho-blue/main/...` — recorded in `src/protocols/morpho-blue/abi.ts`.
   RPC directly on Base and revisit if a Base-native private relay becomes clearly
   established.
 
+## Price sources (Phase 3, §6.5)
+
+- **Chainlink feed addresses, verified directly on-chain (2026-09-16)** — not from
+  Chainlink's own `reference-data-directory.vercel.app` JSON, which turned out to list
+  **multiple different live addresses for the same pair name** (e.g. three distinct
+  "USDC / USD" feeds on Ethereum mainnet, all live and agreeing in price) with no
+  obvious way from the JSON alone to tell which one is "the" canonical feed. Instead,
+  resolved each feed the way it actually matters for Sentinel: read the price source
+  our own watched Aave markets' oracles use
+  (`AaveOracle.getSourceOfAsset(asset)`), then unwrapped Aave's "capped" adapter
+  wrapper some stablecoin sources go through (`description()` returns e.g. `"Capped
+USDC / USD"`; its `ASSET_TO_USD_AGGREGATOR()` gives the raw underlying Chainlink
+  feed) — confirmed each resulting address has live code and a sane recent
+  `latestRoundData()` via `cast call` against the real RPC. Addresses recorded in
+  `src/prices/chainlink-addresses.ts`:
+  - Ethereum: USDC/USD `0xEa674bBC33AE708Bc9EB4ba348b04E4eB55b496b`, ETH/USD (used for
+    `WETH`) `0x5424384B256154046E9667dDFaaa5e550145215e`.
+  - Base: USDC/USD `0x1550207eAeB590D1557a6E6C066D3d57B5A4Dc65`, ETH/USD (used for
+    `WETH`) `0x9dA00D23465282005DB222a441a663eE7B9dfCc8`.
+  - `decimals()` on `AggregatorV3Interface` returns `uint8`, which viem decodes to a
+    plain JS `number`, not `bigint` (unlike every other `latestRoundData()` field,
+    which is `uint256`/`int256`/`uint80` and decodes to `bigint`) — found the hard way
+    via a fork-test failure; noted in `src/prices/chainlink.ts`'s parse-site comment
+    so it doesn't need rediscovering for the next feed-reading code written.
+  - Base-specific pinned-block caveat: the two Base feed contracts above didn't exist
+    yet at block 34,000,000 (reused from the Morpho fork tests) — same
+    too-old-pinned-block failure mode as Phase 2's Aave data provider, see
+    `test/integration/README.md`. Fork tests for these feeds are pinned to a much
+    later Base block (51,370,000) instead.
+- **Coinbase / Kraken public ticker APIs, verified live (2026-09-16, direct `curl`)**:
+  `GET api.coinbase.com/v2/prices/{SYMBOL}-USD/spot` → `{data:{amount,base,currency}}`;
+  `GET api.kraken.com/0/public/Ticker?pair={SYMBOL}USD` → `{error:[], result:{<internal
+pair key>:{c:[lastPrice, lastVolume], ...}}}` — Kraken keys its response by its own
+  internal pair name (e.g. `XETHZUSD` for an `ETHUSD` query), not the queried string,
+  so the reader takes whatever single entry comes back rather than guessing the key.
+  Both are unauthenticated and public; no API key needed. Recorded in
+  `src/prices/cex.ts`.
+
 ## Runtime / tooling versions
 
 - Node.js: Active LTS is **Node 24** as of 2026-09-15 (Node 22 is in Maintenance LTS,

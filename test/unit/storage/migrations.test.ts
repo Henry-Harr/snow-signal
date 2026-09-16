@@ -14,7 +14,12 @@ describe('runMigrations', () => {
       .map((row) => (row as { name: string }).name);
 
     expect(tables).toEqual(
-      expect.arrayContaining(['chain_state', 'processed_blocks', 'schema_migrations']),
+      expect.arrayContaining([
+        'chain_state',
+        'processed_blocks',
+        'price_quotes',
+        'schema_migrations',
+      ]),
     );
     db.close();
   });
@@ -22,10 +27,12 @@ describe('runMigrations', () => {
   it('is idempotent: running twice does not error or duplicate migration rows', () => {
     const db = new Database(':memory:');
     runMigrations(db);
-    runMigrations(db);
+    const afterFirstRun = db.prepare('SELECT version FROM schema_migrations').all();
 
-    const rows = db.prepare('SELECT version FROM schema_migrations').all();
-    expect(rows).toHaveLength(1);
+    runMigrations(db);
+    const afterSecondRun = db.prepare('SELECT version FROM schema_migrations').all();
+
+    expect(afterSecondRun).toEqual(afterFirstRun);
     db.close();
   });
 });

@@ -37,6 +37,34 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: 'price_quotes',
+    up: (db) => {
+      db.exec(`
+        -- Every raw quote from every price source, kept forever (docs/SPEC.md #6.5:
+        -- "store every raw quote with its timestamp") — never overwritten or
+        -- aggregated in place, so a later median/outlier recomputation can always
+        -- replay from the same raw inputs. One row per (source, asset, fetch).
+        CREATE TABLE price_quotes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          source TEXT NOT NULL,
+          asset TEXT NOT NULL,
+          quote_asset TEXT NOT NULL,
+          chain_id INTEGER,
+          price REAL NOT NULL,
+          fetched_at INTEGER NOT NULL,
+          block_number TEXT,
+          raw TEXT NOT NULL
+        );
+
+        -- The query shape detectors/aggregation need: "every quote for this asset
+        -- around this time," newest first.
+        CREATE INDEX idx_price_quotes_asset_time
+          ON price_quotes (asset, quote_asset, fetched_at DESC);
+      `);
+    },
+  },
 ];
 
 function ensureMigrationsTable(db: SentinelDatabase): void {

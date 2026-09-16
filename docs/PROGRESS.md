@@ -6,13 +6,14 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 ## Status as of 2026-09-16
 
 **Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete. Phase 2
-(read-only protocol adapters): complete** — all three adapters (Aave v3, Morpho Blue,
-Morpho vault) implemented and fork-tested against real chain data. Phase 3 (prices and
-watchers) is next. Repo repurposed from an unrelated static ski-resort site to
-Sentinel per the user's explicit instruction, then built out through the full Phase 1
-foundation in the same session. `pnpm lint`, `pnpm typecheck`, `pnpm test` (88 tests,
-unit + property), `pnpm build`, and `pnpm test:integration` (21 fork tests against
-real Ethereum + Base data) all pass.
+(read-only protocol adapters): complete. Phase 3 (prices and watchers): in progress** —
+price collection (Chainlink + CEX, aggregation, storage) done; DEX price reads and all
+three watchers (governance, token supply, large holders) not started. Repo repurposed
+from an unrelated static ski-resort site to Sentinel per the user's explicit
+instruction, then built out through the full Phase 1 foundation in the same session.
+`pnpm lint`, `pnpm typecheck`, `pnpm test` (124 tests, unit + property), `pnpm build`,
+and `pnpm test:integration` (30 fork/live tests against real Ethereum + Base data and
+real Coinbase/Kraken APIs) all pass.
 
 **Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
 `lint`, `typecheck`, `test`, `build`) — all still pass; `doctor` degrades gracefully
@@ -196,6 +197,53 @@ assertion was just wrong.
 vault) implemented and fork-tested against real chain data. Final tally:
 `pnpm lint`/`typecheck`/`build` clean, `pnpm test` 88 unit/property tests passing,
 `pnpm test:integration` 21 fork tests passing across Ethereum and Base.
+
+**Same session, continued — Phase 3 started (price collection):**
+
+- **Storage**: migration 2 adds `price_quotes` (append-only — never overwritten, so
+  aggregation logic can always be recomputed from the original inputs, per spec §6.5
+  "store every raw quote with its timestamp") plus a `PriceQuoteRepository`
+  (`findRecent(asset, quoteAsset, sinceEpoch, untilEpoch)`).
+- **`src/prices/aggregate.ts`**: pure functions — `median`, `medianAbsoluteDeviation`,
+  `rejectOutliers` (MAD-based, never rejects every quote even against a degenerate/
+  bimodal sample), `isStale`, and `aggregatePrice` composing all three. Same purity
+  discipline as `src/signals/**` (no I/O), so it's fully deterministic and
+  replay-safe — this is the piece Phase 4's D06/D07/D10 detectors will actually call.
+- **`src/prices/chainlink.ts`**: reads `AggregatorV3Interface.latestRoundData()`
+  (quorum-read — prices are decision-critical per spec §6.1) for USDC and WETH on
+  Ethereum and Base. Resolving "the" feed address turned out to be non-trivial:
+  Chainlink's own reference-data JSON lists multiple different live addresses for the
+  same pair name with no obvious primary one, so instead each feed was resolved by
+  reading what Aave's _own_ oracle actually uses (`getSourceOfAsset`), unwrapping
+  Aave's "capped" stablecoin adapter where present, and verifying the result live
+  on-chain — see `docs/SOURCES.md` for the exact trail.
+- **`src/prices/cex.ts`**: Coinbase + Kraken public ticker readers, `fetchedAt` read
+  through the injected `Clock` (neither API returns its own timestamp). Deliberately
+  conservative asset mapping — only `WETH`→`ETH` and `USDC`→`USDC` — since e.g.
+  `wstETH` doesn't trade 1:1 with `ETH` and has no direct major-CEX ticker; mapping it
+  to `ETH` would silently price it wrong rather than just not price it.
+- Tests: 32 new unit tests (mocked `ContractReadClient`/`fetch`), plus fork/live
+  integration tests — Chainlink against real Ethereum+Base state (4 tests) and CEX
+  against the real Coinbase/Kraken APIs (5 tests, including a cross-exchange agreement
+  check). All pass.
+
+Two real bugs the fork tests caught (same pattern as Phase 2 — this is exactly why
+they're worth having):
+
+1. **`decimals()` decodes to `number`, not `bigint`**: every other `AggregatorV3
+Interface` field is `uint256`/`int256`/`uint80` and viem decodes those to `bigint`,
+   but `decimals()` returns `uint8`, small enough that viem hands back a plain JS
+   `number`. A zod schema written by analogy with the other fields failed against real
+   data. Fixed and commented at the parse site.
+2. **Pinned Base block too old again**: reused block 34,000,000 (from the Morpho fork
+   tests) for the new Chainlink fork test, but neither Base feed contract had been
+   deployed yet at that height. Same failure mode as Phase 2's Aave data provider —
+   `test/integration/README.md` already documents it, this was just a fresh instance
+   of the same lesson (reused an old pinned block without re-checking it against a
+   _different_ contract's deployment history). Fixed by pinning to a recent block.
+
+Still open in Phase 3: DEX price reads (Uniswap v3 TWAP / Curve), and all three
+watchers (governance/config, token supply, large holders).
 
 ### What's done
 
@@ -512,10 +560,18 @@ at pinned blocks. — **Met. Phase 2 complete.**
 
 ### Phase 3 — Prices and watchers
 
-- [ ] Chainlink feed reads, DEX price reads (Uniswap v3 TWAP via `observe()`, Curve
-      stable pools), CEX ticker polling (≥2 exchanges, e.g. Coinbase + Kraken).
-- [ ] Aggregation: median, outlier rejection, staleness detection per source; raw
-      quotes stored with timestamps.
+- [x] Chainlink feed reads — **DONE 2026-09-16**: `src/prices/chainlink.ts` +
+      `chainlink-addresses.ts`. Real, on-chain-verified feeds for USDC and WETH on
+      Ethereum + Base. See the session note below for how the addresses were resolved
+      and a decimals-decoding bug the fork tests caught.
+  - [ ] DEX price reads (Uniswap v3 TWAP via `observe()`, Curve stable pools) — not
+        started.
+- [x] CEX ticker polling (≥2 exchanges) — **DONE 2026-09-16**:
+      `src/prices/cex.ts`, Coinbase + Kraken public ticker APIs, live-tested.
+- [x] Aggregation: median, outlier rejection, staleness detection per source; raw
+      quotes stored with timestamps. — **DONE 2026-09-16**: `src/prices/aggregate.ts`
+      (pure, matches the `src/signals/**` purity discipline) + `price_quotes` table/
+      `PriceQuoteRepository` (migration 2, append-only, never overwritten).
 - [ ] Governance/config watcher (Aave configurator + executed governance payloads,
       Morpho vault timelocked submissions/role changes, new collateral listings,
       oracle changes, pauses/freezes).
