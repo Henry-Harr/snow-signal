@@ -19,24 +19,31 @@ Snapshot store (SQLite)                                  [src/storage]
 Signal detectors: pure functions over snapshots          [src/signals]
   │
   ▼
-Risk engine: one state machine per position               [src/risk]
+Risk engine: one state machine per position, action        [src/risk]
+recommendation computed as part of the same decision
   │
   ▼
-Action planner                                             [src/actions]
-  ├──▶ Notifier (Telegram, Discord, console)               [src/notify]
-  ├──▶ Paper executor (simulates on a fork, never signs)
-  └──▶ Live executor (Phase 8, gated, Safe + Roles only)
+Alert dispatch                                              [src/notify]
+  ├──▶ Notifier (Telegram, Discord, console)
+  └──▶ (Phase 7/8: paper/live withdrawal execution, not built yet)
   │
   ▼
-Reports, metrics, decision log                              [src/reports, src/ops]
+Reports, decision log                                       [src/reports]
+(metrics/ops tooling beyond the daily report is not built yet)
 ```
 
-A single `runOnce(blockRef)` pipeline function drives every stage in order. It is
-invoked by two different callers that never diverge in behavior:
+A single `runOnce(deps, blockRef)` pipeline function (`src/core/pipeline.ts`, added in
+Phase 5) drives every stage in order for one chain's one confirmed block. It is meant
+to be invoked by two different callers that never diverge in behavior:
 
-- **Live**: `src/chain`'s block source calls it once per confirmed block, per chain.
-- **Replay**: `src/replay`'s runner calls it once per historical block pulled from
-  cache, feeding a `Clock` that reports the historical timestamp instead of wall time.
+- **Live**: `sentinel watch` (`src/cli/watch.ts`, Phase 5) polls each configured
+  chain's `LiveBlockSource` (`src/chain`) and calls `runOnce` once per newly confirmed
+  block.
+- **Replay**: `src/replay`'s runner (Phase 6, not built yet) will call it once per
+  historical block pulled from cache, feeding a `Clock` that reports the historical
+  timestamp instead of wall time — nothing about `runOnce` itself needs to change for
+  this, since it already takes `Clock`/`BlockRef` as inputs rather than reading either
+  from ambient state.
 
 ## 2. Design principles and how they're enforced in code
 

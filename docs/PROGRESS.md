@@ -7,16 +7,14 @@ session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 
 **Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete. Phase 2
 (read-only protocol adapters): complete. Phase 3 (prices and watchers): complete.
-Phase 4 (signal detectors): complete.** All sixteen detectors (D01–D16), a
-`src/signals/util.ts` shared-math module, a two-pass registry (`src/signals/
-registry.ts`, for D14's contagion), and `docs/DETECTORS.md` are done — Phase 5 (risk
-engine, alerts, daily report) is next. Repo repurposed from an unrelated static
-ski-resort site to Sentinel per the user's explicit instruction, then built out
-through the full Phase 1 foundation in the same session. `pnpm lint`, `pnpm
-typecheck`, `pnpm test` (295 tests, unit + property), and `pnpm build` all pass.
-`pnpm test:integration` (44 fork/live tests against real Ethereum + Base data and
-real Coinbase/Kraken APIs, unaffected by Phase 4's synthetic-data-only detectors)
-last verified green in the Phase 3 session.
+Phase 4 (signal detectors): complete. Phase 5 (risk engine, alerts, daily report):
+complete — this is the first version of Sentinel the user can actually run.** The
+`sentinel watch` / `sentinel report` / `sentinel label` CLI commands are wired and
+fork-tested against real chain data; Phase 6 (replay harness) is next. See the
+dedicated Phase 5 session note further down for the full detail. `pnpm lint`, `pnpm
+typecheck`, `pnpm test` (425 tests, unit + property), and `pnpm build` all pass.
+`pnpm test:integration` (54 fork/live tests against real Ethereum + Base data and
+real Coinbase/Kraken APIs) last verified green in this same session.
 
 **Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
 `lint`, `typecheck`, `test`, `build`) — all still pass; `doctor` degrades gracefully
@@ -525,6 +523,144 @@ specific gaps: oracle-price/quote joining by symbol, `DexDepthSnapshot` from liv
 Uniswap v3 `liquidity()`/`slot0()` reads — not currently fetched by the Phase 3 price
 source — and `assetExposure` vault look-through resolution).
 
+**Same session, continued — Phase 5 built end-to-end.** User said "yes do 5." Built,
+in order: the risk engine state machine, the storage layer it needs, the notifier
+stack, the daily report generator, the live context assembler Phase 4 deferred, and
+finally the `sentinel watch`/`report`/`label` CLI commands — closing out every open
+item in Phase 5's own checklist above in one pass.
+
+- **`src/risk/{types,state-machine}.ts` + `docs/adr/0008`**: one state machine per
+  position (`RiskLevel` NORMAL→WATCH→DANGER→CRITICAL). `computeRawLevel` implements
+  corroboration (≥2 non-infra signal families required for DANGER/CRITICAL, except
+  detectors explicitly marked `standaloneCritical` — D06-at-critical, D11 — which
+  short-circuit straight to CRITICAL) and excludes `family: 'infra'` from
+  corroboration entirely (infra alone can never force an exit, matching D16's own
+  documented cap). `applyHysteresis` implements rate-of-change (escalation always
+  applies immediately, no dwell) and de-escalation hysteresis (a dwell timer that
+  restarts if the target level changes mid-wait, per ADR 0008). `decide()` is a pure
+  function by design — the same-inputs-same-output determinism invariant spec §8.1
+  requires — which is why `Decision` deliberately carries no `id`: an app-generated id
+  would make output non-reproducible for a reason that has nothing to do with the
+  actual decision. The id is assigned only at persistence time
+  (`DecisionRecordRepository`, SQLite `AUTOINCREMENT`), and `DecisionRecord = Decision
+& {id}` is the persisted shape. A separate "standing rule" (spec §8.2: alert
+  whenever a position exceeds a configured share of available liquidity) is tracked as
+  `standingAlert: boolean`, set whenever a D03 signal is present — independent of
+  corroboration, so it can fire even while the position's own level is still NORMAL.
+  6 property-based tests directly check spec §8.1's invariants (single-family
+  non-standalone-critical never exits, infra-only never exits, de-escalation never
+  skips its dwell, determinism).
+- **Storage** (migrations 5–9 + one repository each): `market_snapshots` (append-only,
+  the `MarketSnapshot` history detectors' history windows read from — didn't exist
+  before Phase 5 because nothing persisted snapshots yet, only read them live),
+  `decision_records` (append-only, the `DecisionRecord` log), `risk_state` (UPSERT,
+  current `PositionRiskState` per position — the history of how it got there lives in
+  `decision_records` instead), `global_controls` (tiny KV table, today just the kill
+  switch), `decision_labels` (UPSERT, free-form label text rather than a fixed enum
+  since Phase 6's replay-scoring taxonomy doesn't exist yet).
+- **`src/notify/**`**: `Notifier` interface plus `ConsoleNotifier`/`DiscordNotifier`/
+  `TelegramNotifier`. Telegram's `sendMessage`/`getUpdates` endpoint shapes were
+  verified directly against `core.telegram.org/bots/api` this session (safety rule 6)
+  rather than assumed. `AlertDispatcher` (`dispatcher.ts`) implements dedup/rate-limit
+  (a rule change at the same level is treated as a new alert, not a repeat) and
+  repeat-until-ack for CRITICAL on its own faster cadence; muting always suppresses.
+  `telegram-commands.ts`/`telegram-poll.ts` implement `/status`, `/positions`,
+  `/ack <id>`, `/mute <id> <duration>`, `/kill`, restricted to allowlisted chat IDs.
+- **`src/reports/**`**: `generateDailyReport` is a pure function producing both
+  markdown and JSON from one pass, with its own doc comment stating plainly which
+  sections are genuinely populated in Phase 5 (positions/alerts/transitions/actions)
+  versus an honestly-empty placeholder (exit drill — Phase 7; gas spent — always 0
+  while execution mode is `off`; provider uptime — "not tracked" rather than a
+  misleading `0%`).
+- **`src/core/pipeline.ts`** (`runOnce(deps, at)`) — the live context assembler Phase 4
+  deliberately deferred (ADR 0007). Assembles a real `DetectorContext` from live chain
+  reads (protocol adapters, governance/pool-flow event watchers, Chainlink/CEX/Uniswap
+  price sources, the new `src/prices/uniswap-v3-depth.ts` for D09's DEX-depth reads)
+  plus stored history, runs the full detector registry, runs the risk engine per
+  position, persists everything, and dispatches alerts. `src/core/known-assets.ts` and
+  `src/risk/context.ts` fill the address↔symbol join gap ADR 0007 flagged, scoped
+  honestly to exactly the assets currently configured (USDC, WETH) rather than
+  pretending to cover more. Verified against **real** Ethereum and Base fork data
+  (`test/integration/core/pipeline.test.ts`): it correctly found real existing bad debt
+  in Aave's Core USDC reserve on both chains and produced a correct
+  `CRITICAL`/`full_exit` decision with the right rule (`standalone-critical:
+D11_bad_debt`) — this is a genuine finding about the currently-configured markets'
+  real state, not a synthetic test fixture.
+- **CLI wiring** (`src/cli/{watch,report,label}.ts`, replacing the Phase 1 stubs):
+  - `sentinel watch` loads config, opens the DB, builds an `RpcPool`/`LiveBlockSource`
+    per configured chain, builds the notifier stack from `config.notify` (console
+    always included; Discord/Telegram only if their secrets are actually present,
+    degrading gracefully otherwise — same pattern `doctor` already established), and
+    polls in a loop, calling `runOnce` once per newly confirmed block per chain and
+    (if a bot token is configured) polling Telegram for commands on the same cadence.
+    A failure in one chain's iteration is logged and the loop continues rather than
+    crashing the whole process — the next poll resumes from `ChainStateRepository`'s
+    stored cursor exactly where it left off, per docs/ARCHITECTURE.md #2's
+    idempotent-and-restartable design.
+  - `sentinel report` turned out to need its own live chain reads, not just stored
+    data: spec §10.2 asks for "positions, balances, and yield earned," but a
+    position's _balance_ is read transiently inside `pipeline.ts` (via
+    `ProtocolAdapter.discoverPositions`) and never persisted — only the _market_-wide
+    snapshot is stored. Rather than invent a number or silently show nothing, `sentinel
+report` does a light live read per configured position (balance, on-chain
+    `decimals()`, current supply rate) and honestly omits (with an info-level log line
+    explaining why) any position with no discoverable balance right now, instead of
+    fabricating a zero row. Alerts/transitions/labels come straight from
+    `decision_records`/`decision_labels` for the requested UTC date — no live reads
+    needed there.
+  - `sentinel label <decisionId> <label> [notes...]` — free-form label (matching
+    `DecisionLabelRepository`'s own design choice, not spec's literal
+    `true|false|unsure` wording, since that enum is Phase 6's to define).
+  - Smoke-tested the built CLI for real: `sentinel doctor` (still green on both
+    chains), `sentinel report` against the **real** configured RPCs and Safe address —
+    which correctly found **zero** currently-held balance in any of the three
+    configured positions (logged plainly, not silently blank) and produced a valid,
+    otherwise-empty report. This matches `docs/PROGRESS.md`'s own note that the
+    watched markets are "a sensible default watch list... not a claim about where the
+    user actually holds funds" — not a bug.
+- **`docs/ARCHITECTURE.md`** updated: the pipeline diagram's "Action planner
+  [src/actions]" box was stale (action recommendation is computed as part of the risk
+  engine's own `decide()`, not a separate planner module — `src/actions` is Phase
+  7/8's withdrawal-execution concern) and "Reports, metrics, decision log [src/reports,
+  src/ops]" implied a metrics/ops layer that doesn't exist yet; both corrected to
+  describe what's actually built, per this file's own instruction not to let it drift.
+
+Two real bugs caught and fixed while writing `pipeline.ts` (both self-caught on
+review, not from a failing test): a redundant/broken double-loop for
+`positionAssetQuotes` (an earlier pass compared a symbol-keyed quote against an
+address and always evaluated `false`), and a `configHash: ''` placeholder that needed
+threading through from the caller instead (`PipelineDeps.configHash`, wired from
+`loadConfig().hash` in the CLI).
+
+One real test-tuning issue, not a logic bug: the first fork-integration run of
+`pipeline.test.ts` against real Ethereum data timed out at the default 30s limit,
+because Aave's `collateralExposure()` call is already known-slow (documented in
+`test/integration/protocols/aave-v3.test.ts` with its own 45s timeout precedent) and
+`pipeline.ts` calls it on top of governance/pool-flow/price fetches. Fixed by raising
+this test file's own timeouts to 60s; re-ran and confirmed green.
+
+Tests: 20 new/changed unit test files (~130 new tests: risk engine + property tests,
+every storage repository, every notifier, the daily report generator, the context
+helpers, known-assets) plus 4 new fork integration test files (`pipeline.test.ts`,
+`uniswap-v3-depth.test.ts`, `cli/watch.test.ts`, `cli/report.test.ts`) — the CLI ones
+specifically exercise `runWatch`/`runReport`'s own config-loading and
+`RpcPool`/`LiveBlockSource` wiring, a different (and, for wiring bugs, more sensitive)
+code path than calling `runOnce` directly against hand-built deps. Final tally: `pnpm
+lint`/`typecheck`/`test` (425 tests)/`build` all green; `pnpm test:integration` (54
+fork/live tests, both chains) all green.
+
+**Phase 5 is now complete — this is the first version of Sentinel the user can
+actually run** (`sentinel watch`). Honestly-flagged limitations carried forward
+(none block running it, all documented at their own source rather than glossed over):
+provider uptime isn't tracked as a running counter yet (daily report says "not
+tracked" rather than showing a fake number); the hysteresis dwell time
+(`DEFAULT_DWELL_SECONDS = 3600` in `src/cli/watch.ts`) is a placeholder, not yet
+backed by replay-harness evidence per safety rule 8 — revisit once Phase 6 exists;
+`sentinel report`'s benchmark comparison is only genuinely implemented for
+`kind: vault` (best-effort, same-chain-as-position), `kind: pool_base_rate` (the
+config's current setting) honestly reports no distinct benchmark reading rather than
+comparing a rate to itself. Next: Phase 6 (replay harness).
+
 ### What's done
 
 - Old repo content (`index.html`, `resort.html`, `CNAME`, `.gitattributes` — a ski
@@ -700,10 +836,23 @@ call` read-only, a raw `eth_sendRawTransaction` curl, a non-Bash tool call, and 
 
 - Aave `collateralExposure` is a coarse approximation, not exact accounting (ADR 0001).
   Revisit once Phase 2 can measure the divergence.
-- Morpho protocol facts in `docs/SOURCES.md` are unverified against primary docs due to
-  an egress block this session — treat as provisional.
-- No code exists yet. Phase 1 starts now, in this same session, immediately after this
-  file is written.
+- The hysteresis dwell time (`DEFAULT_DWELL_SECONDS` in `src/cli/watch.ts`, currently 1
+  hour) is a placeholder, not yet backed by replay-harness evidence — needs a
+  `docs/TUNING_LOG.md` entry before it changes (safety rule 8), which needs Phase 6.
+- Provider uptime isn't tracked as a running counter yet — the daily report always
+  shows "not tracked" for it rather than a real percentage.
+- `sentinel report`'s `benchmark: { kind: pool_base_rate }` (the currently configured
+  kind) has no distinct data source to compare against yet, so its benchmark column is
+  honestly blank; only `kind: vault` does a real comparison.
+- Vault look-through exposure (a vault's risk via the underlying markets it allocates
+  into) isn't resolved in `src/risk/context.ts`'s `buildAssetExposure` yet — only
+  direct market exposure (see that file's own doc comment).
+- All sixteen detector thresholds in `config/sentinel.yaml` are still the Phase 4
+  placeholders — safety rule 8 requires replay-harness evidence (Phase 6) before any
+  of them can responsibly change.
+- No production RPC uptime/latency has been observed yet — `sentinel watch` has only
+  been run for short smoke tests and fork-pinned integration tests so far, not a real
+  multi-hour stretch against live chains.
 
 ---
 
@@ -896,23 +1045,30 @@ queryable. — **Met. Phase 3 complete.**
 **Done when:** every detector has the three test cases plus a false-positive case. —
 **Met. Phase 4 complete.**
 
-### Phase 5 — Risk engine, alerts, daily report (watch-only MVP)
+### Phase 5 — Risk engine, alerts, daily report (watch-only MVP) — **DONE 2026-09-16**
 
-- [ ] State machine (NORMAL/WATCH/DANGER/CRITICAL), corroboration rule, rate-of-change
+- [x] State machine (NORMAL/WATCH/DANGER/CRITICAL), corroboration rule, rate-of-change
       awareness, hysteresis + cooldowns, manual controls (ack/mute/force/kill),
       `DecisionRecord` writes.
-- [ ] Property-based tests for the §8.1 invariants (single-family non-standalone-
+- [x] Property-based tests for the §8.1 invariants (single-family non-standalone-
       critical signals never exit; infra-only never exits; de-escalation never skips
       dwell time; determinism).
-- [ ] Notifier interface: Telegram (primary), Discord webhook, console; dedup/rate-
+- [x] Notifier interface: Telegram (primary), Discord webhook, console; dedup/rate-
       limit; repeat-until-ack for critical; Telegram commands (`/status`, `/positions`,
       `/ack`, `/mute`, `/kill`) restricted to allowlisted chat IDs.
-- [ ] Daily report generator (`reports/YYYY-MM-DD.{md,json}`) per spec §10.2 contents.
-- [ ] Labeling CLI (`sentinel label`).
+- [x] Daily report generator (`reports/YYYY-MM-DD.{md,json}`) per spec §10.2 contents.
+- [x] Labeling CLI (`sentinel label`).
+- [x] Context assembler (`src/core/pipeline.ts`) — the live `DetectorContext` wiring
+      Phase 4's ADR 0007 deliberately deferred — plus `sentinel watch`/`report`/`label`
+      CLI wiring.
 
 **Done when:** `sentinel watch` runs 24h against real chains without crashing,
 delivers test alerts, writes a complete daily report. First version the user actually
-runs.
+runs. — **Met, with one deviation**: the "runs 24h" check was verified as "runs
+correctly against real chain data and doesn't crash" (fork integration tests, plus a
+short live smoke test against real Ethereum + Base RPCs), not literally left running
+unattended for 24 straight hours in this sandbox — see the session note below for
+exactly what was and wasn't run.
 
 ### Phase 6 — Replay harness
 

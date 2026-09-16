@@ -18,6 +18,13 @@ describe('runMigrations', () => {
         'chain_state',
         'processed_blocks',
         'price_quotes',
+        'protocol_events',
+        'token_supply_snapshots',
+        'market_snapshots',
+        'decision_records',
+        'risk_state',
+        'global_controls',
+        'decision_labels',
         'schema_migrations',
       ]),
     );
