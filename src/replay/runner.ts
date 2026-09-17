@@ -202,7 +202,7 @@ export async function runReplayScenario(
     positions: [scenarioConfig(scenario)],
     detectors: {},
     policy: options.policy,
-    execution: { mode: 'off', maxPriorityFeeGwei: {} },
+    execution: { mode: 'off', maxPriorityFeeGwei: {}, liveChains: [], roles: {} },
     notify: {},
     reports: { dailyUtcHour: 0, benchmark: { kind: 'pool_base_rate' } },
   };

@@ -91,7 +91,7 @@ function minimalConfig(): SentinelConfig {
       critical: { action: 'full_exit' },
       maxShareOfAvailableLiquidity: 1,
     },
-    execution: { mode: 'paper', maxPriorityFeeGwei: { ethereum: 40 } },
+    execution: { mode: 'paper', maxPriorityFeeGwei: { ethereum: 40 }, liveChains: [], roles: {} },
     notify: {},
     reports: { dailyUtcHour: 0, benchmark: { kind: 'pool_base_rate' } },
   };

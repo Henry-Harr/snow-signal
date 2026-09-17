@@ -98,9 +98,30 @@ const policySchema = z.object({
 
 const executionModeSchema = z.enum(['off', 'paper', 'live']);
 
+/** Per-chain Zodiac Roles deployment details (docs/SPEC.md §8.4, docs/
+ * MAINNET_SETUP.md) — required for a chain to be live-capable at all, independent of
+ * whether it's currently enabled (see `liveChains` below). `roleKey` is a `bytes32`
+ * value (any value; convention is `keccak256("sentinel-<chain>-withdraw")`, matching
+ * `scripts/setup-safe-roles-fork.ts`). */
+const rolesConfigSchema = z.object({
+  rolesModAddress: addressSchema,
+  roleKey: z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'must be a 0x-prefixed 32-byte value'),
+  botPrivateKeyEnvVar: z.string().min(1),
+});
+
 const executionSchema = z.object({
   mode: executionModeSchema.default('off'),
   maxPriorityFeeGwei: z.record(z.string(), z.number().nonnegative()),
+  /** Per-chain live-execution opt-in (spec §8.4: "allowed ... per chain, in
+   * config" — the user's own explicit gate, never set by Sentinel or the assistant
+   * building it). A chain only actually goes live once live execution is wired into
+   * the pipeline (docs/adr/0012-live-executor-not-wired-into-pipeline.md) *and*
+   * `mode` is `'live'` *and* the chain is listed here — three independent gates,
+   * every one of them required. */
+  liveChains: z.array(z.string()).default([]),
+  /** Per-chain Roles config — see `rolesConfigSchema` above. Keyed by chain name,
+   * same as `chains`/`positions`. */
+  roles: z.record(z.string(), rolesConfigSchema).default({}),
 });
 
 const telegramNotifySchema = z.object({

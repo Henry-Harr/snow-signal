@@ -56,7 +56,7 @@ function testConfig(chain: string): SentinelConfig {
       critical: { action: 'full_exit' },
       maxShareOfAvailableLiquidity: 0.05,
     },
-    execution: { mode: 'off', maxPriorityFeeGwei: {} },
+    execution: { mode: 'off', maxPriorityFeeGwei: {}, liveChains: [], roles: {} },
     notify: {},
     reports: { dailyUtcHour: 0, benchmark: { kind: 'pool_base_rate' } },
   };
