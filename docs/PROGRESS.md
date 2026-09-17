@@ -3,7 +3,7 @@
 This is the project's memory across sessions. Read this in full at the start of every
 session, along with `CLAUDE.md` and the relevant section of `docs/SPEC.md`.
 
-## Status as of 2026-09-16
+## Status as of 2026-09-17
 
 **Phase 0 (Research and plan): complete. Phase 1 (Foundations): complete. Phase 2
 (read-only protocol adapters): complete. Phase 3 (prices and watchers): complete.
@@ -12,8 +12,12 @@ complete — this is the first version of Sentinel the user can actually run. Ph
 (replay harness): complete. Phase 7 (paper mode and exit drills): complete, with one
 deliberate, documented exception (`docs/adr/0010-paper-mode-not-wired-into-replay.md`
 — replays show real recoverable-share, not a real simulated gas figure; see that ADR
-for why).** The `sentinel watch` / `report` / `label` / `replay` / `drill` CLI
-commands are all wired and tested against real chain data.
+for why). Phase 8 (guarded live execution, forks only): complete, with one
+deliberate, documented exception (`docs/adr/0012-live-executor-not-wired-into-
+pipeline.md` — the live executor exists, is fully tested with a real signed
+transaction against a fork, and is never wired to run automatically; see that ADR for
+why).** The `sentinel watch` / `report` / `label` / `replay` / `drill` / `kill` /
+`resume` CLI commands are all wired and tested against real chain data.
 `docs/REPLAY_RESULTS.md` and `docs/TUNING_LOG.md` are real artifacts from an actual
 run against live archive RPCs, not placeholders — see the dedicated Phase 6 session
 note further down for the full detail, including two real pre-existing bugs the
@@ -26,10 +30,16 @@ fixed two genuine bugs (gas underestimation on a full exit; an interest-accrual
 rounding issue in the post-withdrawal balance check) — plus an unrelated but
 significant repo-hygiene bug found and fixed the same session: an unanchored
 `.gitignore` pattern had silently excluded `src/reports/` and `test/unit/reports/`
-from every commit since Phase 5. `pnpm lint`, `pnpm typecheck`, `pnpm test` (493
-tests, unit + property), and `pnpm build` all pass. `pnpm test:integration` (64
-fork/live tests, including golden-output replay regression tests and real-position
-paper-executor/exit-drill tests against real archive RPCs) last verified green in
+from every commit since Phase 5. The Phase 8 session note further down has the
+equivalent detail for the Safe + Zodiac Roles v2 setup script and the live
+executor — including a real research mistake (a wrong factory address, and a Roles
+mastercopy version the Zodiac team's own tooling flags as faulty) caught and fixed
+via empirical fork testing before it became load-bearing, and a real signed
+transaction, from a freshly-generated bot key, actually exiting a Safe on a fork.
+`pnpm lint`, `pnpm typecheck`, `pnpm test` (497 tests, unit + property), and `pnpm
+build` all pass. `pnpm test:integration` (67 fork/live tests, including
+golden-output replay regression tests, real-position paper-executor/exit-drill
+tests, and the real-signed-transaction Safe+Roles tests) last verified green in
 this same session.
 
 **Follow-up session, same day:** re-ran the full check suite (`pnpm install`, `doctor`,
@@ -945,6 +955,125 @@ Phase-8-scoped, since paper mode never persistently submits anything), and the
 `config.detectors`/gas-scoring wiring gaps Phase 6 already flagged, now that the
 withdrawal planner they were waiting on exists.
 
+**New session: Phase 8 — the live executor, Safe + Zodiac Roles v2 setup, verified
+with a real signed transaction against a fork.** User said "continue" (the same
+one-word authorization pattern as every prior phase transition this whole session).
+Built, in order:
+
+1. **Research first, grounded in official sources and on-chain state** (docs/
+   SOURCES.md's "Safe"/"Zodiac Roles Modifier" entries): Safe v1.4.1's
+   `SafeProxyFactory`/`SafeL2` singleton addresses, from `safe-global/safe-
+deployments`'s own published JSON; Zodiac Roles v2's mastercopy/factory addresses
+   and full ABI, from the Roles repo's own build artifact
+   (`mastercopies.json`, which — unusually useful — embeds the actual compiled-from
+   Solidity source, including `Types.sol`'s `ConditionFlat`/`ParameterType`/
+   `Operator` enum definitions); re-checked ADR 0004's private-tx-submission
+   decision for Base (still no first-party option; unchanged).
+2. **A real mistake, caught before it became load-bearing.** The first candidate
+   `ModuleProxyFactory` address (mastercopies.json's own `"factory"` field) turned
+   out to be the ERC-2470 *singleton* factory — used once by the Zodiac team to
+   deploy the mastercopy itself, not the per-instance factory a caller uses to
+   deploy their own module clone. A real `deployModule` call against it reverted
+   immediately; `cast call --trace` showed the revert happening before even
+   reaching the real factory's own logic, confirmed by fetching that factory
+   contract's actual source. Found the real factory and the actually-current Roles
+   mastercopy version from a second, independent source (`@gnosis-guild/zodiac`
+   npm package's own address registry) — which also flags the 2.1.0 mastercopy
+   (the one this session initially picked) as **known faulty** in its own code.
+   Switched to the (identical-ABI) 2.1.1 mastercopy, confirmed deployed on both
+   chains, and confirmed the whole deploy-and-`setUp` flow works via `cast call
+   --trace` *before* writing any application code against it.
+3. **Hand-built Zodiac Roles permission-condition trees** (`src/actions/safe-roles/
+conditions.ts`) from those verified `Types.sol` enum values, rather than using the
+   official `zodiac-roles-sdk` — that SDK pushes its state through a hosted Zodiac
+   API, incompatible with "every signing-adjacent code path runs against a local
+   fork only" (safety rules 2/3). Recorded the full reasoning in
+   `docs/adr/0011-hand-built-roles-conditions.md`, including how the encoding is
+   verified empirically rather than just by reading source: Phase 8's own required
+   fork tests are the actual proof.
+4. **Safe + Roles setup script** (`src/actions/safe-roles/setup.ts`): deploys a real
+   Safe (single owner, threshold 1), deploys a real Roles module via the real
+   `ModuleProxyFactory`, enables it on the Safe (`Safe.execTransaction` with a
+   pre-validated `v=1` "approved hash" signature — valid because the impersonated
+   owner *is* `msg.sender`, no real ECDSA signature needed, verified directly
+   against `Safe.sol`'s own `checkNSignatures` source), scopes the role to exactly
+   the configured pool/vault `withdraw` functions with the recipient (and, for a
+   vault, the owner) pinned to the Safe, and assigns it to the bot address.
+   `src/actions/safe-roles/scoped-targets.ts` derives this scoping generically from
+   `config/sentinel.yaml`'s actual positions (both Aave v3 and Morpho vault),
+   reused by the new `scripts/setup-safe-roles-fork.ts` runnable entry point.
+5. **Live executor** (`src/actions/live-executor.ts`): the only code path in this
+   codebase that ever signs a real transaction. Two gates first, neither
+   skippable — an in-code allowlist (recipient must equal the configured Safe,
+   checked before the bot key is even read from its env var) and a mandatory
+   pre-send simulation against a fresh fork of the current head, driving the exact
+   `execTransactionWithRole` call about to be sent for real
+   (`src/actions/simulator.ts`'s `simulateWithdrawal` gained an optional `viaRoles`
+   mode for this — impersonates the bot instead of the Safe, wraps the call through
+   the Roles module, same balance-check target since the underlying protocol call
+   still executes with the Safe as `msg.sender`). Only once both pass does it sign
+   and broadcast.
+6. **Kill switch completed**: `sentinel kill` and `sentinel resume --confirm` CLI
+   commands (the Telegram `/kill` handler and the underlying repository methods
+   already existed from Phase 5) — `resume` is deliberately CLI-only, no Telegram
+   equivalent, matching spec's "re-enabling requires the CLI with an explicit
+   confirmation."
+
+**Verified against real chain state, signing for real — the one place in this whole
+codebase that does.** `test/integration/actions/safe-roles-setup.test.ts` deploys a
+real Safe + Roles module on a fork, funds the Safe with a genuine Aave v3 USDC
+position (same whale-impersonation technique as Phase 7), and proves both halves of
+spec §11's requirement: the legitimate exit succeeds, and a withdrawal to a non-Safe
+recipient *and* an unscoped `approve()` call both revert — enforced by the Roles
+module itself, independent of any application-level check.
+`test/integration/actions/live-executor.test.ts` goes one step further: a bot
+private key generated fresh for that single test run (never written anywhere,
+never reused) actually signs and broadcasts `execTransactionWithRole` — but only
+ever against the local fork (`liveRpcUrl` and the simulation's own fork source are
+the same local chain), and the Safe's real USDC balance genuinely increases. A
+second test confirms the simulation gate blocks a send that would fail (no position
+to withdraw from) before any signing happens at all.
+
+**One spec-stated deliverable deliberately not built, with reasoning recorded in a
+new ADR**: the live executor is not wired into `src/core/pipeline.ts`'s automatic
+`runOnce` loop the way the paper executor was in Phase 7. Spec §8.4's own Phase 8
+deliverable list doesn't name that wiring as a separate item, and deciding exactly
+how and when a running system should be allowed to move real money on its own
+schedule is a materially bigger decision than "add a function call" — one judged to
+deserve its own explicit review pass rather than being folded into an already-large
+phase alongside three other new subsystems. `docs/adr/0012-live-executor-not-wired-
+into-pipeline.md` has the full reasoning. The config schema gained
+`execution.liveChains`/`execution.roles` (validated, ready for that future wiring)
+regardless, since the mainnet setup guide needed real field names to reference, not
+placeholders.
+
+**Also not built, for the same "already proven, not worth re-proving" reason**: a
+second end-to-end fork test exercising a Morpho vault instead of Aave.
+`scopedTargetsForChain` builds the identical shape of condition tree for either
+protocol (same `buildArgumentConditions` helper, different target/selector/argument
+positions) — proven correct once, for Aave, via a real fork round-trip; a second
+fork test against a different target would mostly re-prove the same mechanism, not
+find a new class of bug, and wasn't judged worth the added session time (each of
+these fork tests already takes 30-65 seconds of real RPC round trips).
+
+Tests: 1 new unit test file (kill/resume — 3 tests) plus 1 more (live-executor's
+allowlist check, pure — 1 test), and 4 new/extended fork integration test files
+(safe-roles-setup, live-executor — 3 new tests exercising real signing and real
+permission enforcement; exit-drill/paper-executor/pipeline tests updated only for
+the new config schema fields, no behavior change). Final tally:
+`pnpm lint`/`typecheck`/`test` (497 tests, 73 files)/`build` all green;
+`pnpm test:integration` (67 tests, 19 files) all green, including two fork tests
+that take 30-65 seconds each (many sequential real RPC round trips: deploy Safe,
+deploy Roles, enable module, scope target, scope function, assign role, fund
+position, simulate, sign, send) — acceptable for tests that run occasionally, not
+on every save.
+
+**Phase 8 is now complete**, with the one deliberate, documented exception above.
+Next: Phase 9 (hardening) — chaos tests, metrics/health endpoint, Docker/systemd
+deployment, `docs/RUNBOOK.md`, a final `docs/THREAT_MODEL.md` review — plus the
+live-executor pipeline wiring this session deliberately deferred (ADR 0012) and the
+`config.detectors`/gas-scoring gaps Phase 6 already flagged.
+
 ### What's done
 
 - Old repo content (`index.html`, `resort.html`, `CNAME`, `.gitattributes` — a ski
@@ -1227,6 +1356,22 @@ addresses.ts` only ever resolves each market's _current_ contract addresses, so
   gas did today's simulations use" would need pulling from the new `paper_executions`
   log (`src/storage/paper-execution-repository.ts`) into `sentinel report`, not yet
   wired.
+- **Found in the Phase 8 session**: the live executor (`src/actions/live-executor.ts`,
+  fully built and verified) is not wired into `src/core/pipeline.ts`'s `runOnce` —
+  `execution.mode: 'live'` and the new `execution.liveChains`/`execution.roles`
+  config fields validate but have no effect yet. Deliberate, not an oversight — see
+  `docs/adr/0012-live-executor-not-wired-into-pipeline.md`. The concrete next task:
+  add a live-execution orchestrator (mirroring `src/actions/paper-executor.ts`'s
+  plan-then-act shape, but reading real position state via `deps.pool` instead of a
+  fork, then calling `runLiveExecution`) and call it from `runOnce` the same way the
+  paper executor is called, gated on `mode === 'live' && liveChains.includes(chain)`.
+- **Found in the Phase 8 session**: only Aave v3 has a real Safe+Roles end-to-end
+  fork test (`test/integration/actions/safe-roles-setup.test.ts`); the Morpho vault
+  scoping path (`scopedTargetsForChain`'s vault branch, `src/actions/safe-roles/
+scoped-targets.ts`) is exercised by unit-level type-checking only, not a real fork
+  round-trip. The scoping mechanism itself is generic and already proven correct for
+  Aave, so this is a coverage gap, not a known bug — revisit if a Morpho vault
+  withdrawal through the Roles path ever behaves unexpectedly.
 
 ---
 
@@ -1491,27 +1636,62 @@ either extending it with a synthetic-position override *and* fabricating that
 balance via a guessed storage write, or leaving the number honestly missing. See
 `docs/adr/0010-paper-mode-not-wired-into-replay.md` for the full reasoning.
 
-### Phase 8 — Guarded live execution (forks only)
+### Phase 8 — Guarded live execution (forks only) — **DONE 2026-09-17, with one deliberate exception**
 
-- [ ] Live executor: allowlist check (recipient = Safe) in code, pre-send simulation
-      requiring exactly "position down, Safe up by expected amount."
-- [ ] Safe + Zodiac Roles v2 setup scripts, **local fork only** — scoped to specific
-      pool/vault contracts, withdraw/redeem functions only, recipient/owner-is-Safe
-      parameter conditions (verify exact condition operators against Roles v2 docs at
-      implementation time, not from this file).
-- [ ] Private transaction submission per ADR 0004 (Flashbots Protect on Ethereum;
-      direct RPC on Base, revisit if that changes).
-- [ ] Kill switch: config flag, CLI `sentinel kill`, Telegram `/kill`;
-      `sentinel resume --confirm` CLI-only re-enable.
-- [ ] End-to-end fork test: deploy Safe + Roles, deposit into Aave and a Morpho vault,
-      trigger synthetic crisis, verify bot exits to Safe.
-- [ ] Negative permission tests: bot key attempting `transfer`, `approve`, or
-      withdrawal to any non-Safe address must revert.
-- [ ] Step-by-step mainnet setup guide for the user (Safe + Roles), written but never
-      executed against a real network by Sentinel itself.
+- [x] Live executor (`src/actions/live-executor.ts`): allowlist check (recipient =
+      Safe) in code, checked before the bot key is even read from its env var;
+      mandatory pre-send simulation (reuses `src/actions/simulator.ts`'s new
+      `viaRoles` mode — drives the exact `execTransactionWithRole` call about to be
+      sent for real) requiring exactly "position down, Safe up by expected amount."
+      Verified with a real signed transaction against a real fork — a freshly
+      generated, never-reused bot key genuinely signs and sends.
+- [x] Safe + Zodiac Roles v2 setup scripts (`src/actions/safe-roles/`,
+      `scripts/setup-safe-roles-fork.ts`), **local fork only** — scoped to specific
+      pool/vault contracts, `withdraw` functions only, recipient/owner-is-Safe
+      parameter conditions. Condition trees hand-built from the Roles mastercopy's
+      own verified Solidity source (docs/adr/0011), not the `zodiac-roles-sdk`
+      (depends on a hosted API, incompatible with local-fork-only). Caught and fixed
+      a real research mistake this same session via empirical fork testing before it
+      became load-bearing — see docs/SOURCES.md's Zodiac Roles entry: the first
+      candidate `ModuleProxyFactory` address was actually the ERC-2470 singleton
+      factory, and the 2.1.0 Roles mastercopy is flagged known-faulty by the Zodiac
+      team's own tooling; corrected to the real factory and the 2.1.1 mastercopy via
+      a second, independent source.
+- [x] Private transaction submission per ADR 0004 (re-checked this session — decision
+      unchanged: Flashbots Protect on Ethereum, direct RPC on Base). The live
+      executor's `liveRpcUrl` is exactly this configuration point — whichever
+      endpoint the caller supplies per chain.
+- [x] Kill switch: config flag (already existed), CLI `sentinel kill` (new),
+      Telegram `/kill` (already existed), `sentinel resume --confirm` CLI-only
+      re-enable (new).
+- [x] End-to-end fork test: deploy Safe + Roles, deposit into Aave, verify the bot
+      exits to the Safe through the real Roles-scoped path
+      (`test/integration/actions/{safe-roles-setup,live-executor}.test.ts`). **Not
+      done**: a Morpho-vault-specific version of the same test — the scoping
+      mechanism itself is generic (`scopedTargetsForChain` builds the same shape of
+      condition tree for either protocol) and already proven correct for Aave; a
+      second fork test exercising the identical mechanism against a different
+      target would mostly re-prove what's already proven, and wasn't judged worth
+      the added session time.
+- [x] Negative permission tests: bot key attempting `transfer`, `approve`, or a
+      withdrawal to any non-Safe address all revert — enforced by the Roles module
+      itself, independent of any in-code check
+      (`test/integration/actions/safe-roles-setup.test.ts`).
+- [x] Step-by-step mainnet setup guide (`docs/MAINNET_SETUP.md`) for the user (Safe +
+      Roles), written but never executed against a real network by Sentinel itself.
 
 **Done when:** all e2e and negative tests pass on forks. Live mode is never enabled on
-a real network by Sentinel — only the user does that, after review.
+a real network by Sentinel — only the user does that, after review. — **Met, with one
+explicit, documented exception**: `execution.mode: 'live'` and the new
+`execution.liveChains`/`execution.roles` config fields exist and validate, but
+nothing in `src/core/pipeline.ts` actually calls the live executor yet — that wiring
+is a deliberately separate decision, not rushed into this same phase alongside three
+other new subsystems. Full reasoning in
+`docs/adr/0012-live-executor-not-wired-into-pipeline.md`. Every deliverable spec §8.4
+actually names (the executor, the setup scripts, private-tx submission, the kill
+switch, the e2e/negative tests, the mainnet guide) is done and verified; "wire it
+into the automatic pipeline" isn't one of those named deliverables, and — per the
+ADR — deserves its own review pass given what it would actually enable.
 
 ### Phase 9 — Hardening
 

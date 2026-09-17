@@ -27,7 +27,9 @@ Alert dispatch                                              [src/notify]
   ├──▶ Notifier (Telegram, Discord, console)
   └──▶ Paper executor (Phase 7, off by default — execution.mode: paper)
          plan → fork-simulate → record, never signs           [src/actions]
-       (Phase 8: live execution, gated behind Zodiac Roles, not built yet)
+       (Phase 8: live executor built + Zodiac Roles-gated, verified with a
+        real signed tx on a fork — not yet called automatically here;
+        docs/adr/0012-live-executor-not-wired-into-pipeline.md)
   │
   ▼
 Reports, decision log                                       [src/reports]
@@ -113,12 +115,21 @@ only. `paper` (Phase 7, built) runs the exact same plan through an Anvil-fork
 simulation (`src/actions/{simulator,paper-executor}.ts`) that impersonates the Safe
 and never signs anything, verifying both "the Safe's balance went up" and "the
 position went down" by the expected amount before recording the outcome
-(`paper_executions`, append-only). `live` (Phase 8, not built) additionally requires
-the Safe + Zodiac Roles permission scoping described in spec §8.4, an allowlist check
-in code (recipient must be the configured Safe), and a pre-send simulation against
-the latest block that must show exactly "position down, Safe up by the expected
-amount" or the send is aborted — the same bar the paper executor already enforces,
-just with a real signature at the end instead of a fork.
+(`paper_executions`, append-only). `live` (Phase 8, built — see `docs/adr/0012-live-
+executor-not-wired-into-pipeline.md` for the one thing it deliberately isn't yet:
+called automatically by the pipeline) additionally requires the Safe + Zodiac Roles
+permission scoping described in spec §8.4 (`src/actions/safe-roles/` — a real Safe
+and a real Roles v2 module, deployed and scoped on a fork by
+`scripts/setup-safe-roles-fork.ts`, deployed for real by the user following
+`docs/MAINNET_SETUP.md`), an allowlist check in code (recipient must be the
+configured Safe, checked before the bot key is even read) and a mandatory pre-send
+simulation against the latest block — `src/actions/live-executor.ts`'s
+`runLiveExecution` — that must show exactly "position down, Safe up by the expected
+amount" or the send is aborted, the same bar the paper executor enforces, reusing the
+same `simulateWithdrawal` function via its `viaRoles` mode (impersonates the bot,
+wraps the call through the Roles module — the real path a live send takes) rather
+than a second implementation. Only once both gates pass does it sign (a key read
+once from an env var, never logged) and broadcast.
 
 The daily exit drill (`src/actions/exit-drill.ts`, Phase 7) reuses the paper executor
 directly rather than a separate code path: it forks the latest block and forces a
