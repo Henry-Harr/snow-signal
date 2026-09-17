@@ -1372,6 +1372,21 @@ scoped-targets.ts`) is exercised by unit-level type-checking only, not a real fo
   round-trip. The scoping mechanism itself is generic and already proven correct for
   Aave, so this is a coverage gap, not a known bug — revisit if a Morpho vault
   withdrawal through the Roles path ever behaves unexpectedly.
+- **Found in the Phase 9 dependency audit** (`docs/THREAT_MODEL.md` §5): `pnpm
+  audit` (all deps) reports 7 advisories (1 critical, 1 high, 5 moderate), all in
+  `vitest`'s own transitive chain (`vitest` → `vite`/`@vitest/mocker` → `esbuild`) —
+  every one requires the Vitest UI server or a Vite dev server running and
+  reachable, neither of which this project ever starts. `pnpm audit --prod` (what
+  actually ships, per `docker/Dockerfile`'s `pnpm prune --prod`) is clean. The fix
+  needs `vitest` ≥4.1.11: tried this session (`pnpm add -D vitest@^4.1.11`), and it
+  breaks immediately — an unmet peer on `vite` (needs `^6/7/8`, resolved `5.4.21`)
+  and then a hard `ERR_PACKAGE_PATH_NOT_EXPORTED` on `vitest`'s own `./module-runner`
+  export from vite@5. Needs a coordinated `vitest`+`vite` major-version bump and a
+  re-check of `vitest.workspace.ts` (possibly replaced by `projects:` in a single
+  config in newer vitest) with the full test suite run after — reverted rather than
+  pushed through un-migrated. Concrete next task: attempt the bump in its own
+  branch/session with room to actually fix the workspace config and re-verify all
+  507+ tests, not as a drive-by inside an unrelated task.
 
 ---
 
