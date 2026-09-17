@@ -1,0 +1,13 @@
+# Daily backup schedule. Install alongside sentinel-backup.service:
+#   sudo cp docker/systemd/sentinel-backup.* /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now sentinel-backup.timer
+
+[Unit]
+Description=Daily Sentinel database backup
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

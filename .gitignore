@@ -17,6 +17,7 @@ keystores/
 # previously (and silently) excluded src/reports/ and test/unit/reports/ from every
 # commit since Phase 5.
 /reports/
+/backups/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm

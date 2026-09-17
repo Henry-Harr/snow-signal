@@ -1,0 +1,16 @@
+# One-shot backup unit, triggered by sentinel-backup.timer — see
+# docker/systemd/sentinel.service's header comment for install prerequisites.
+
+[Unit]
+Description=Sentinel database backup
+After=sentinel.service
+
+[Service]
+Type=oneshot
+User=sentinel
+Group=sentinel
+WorkingDirectory=/opt/sentinel
+ExecStart=/usr/bin/node /opt/sentinel/dist/cli/index.js backup \
+    --db /var/lib/sentinel/sentinel.sqlite \
+    --out-dir /opt/sentinel/backups \
+    --retain 14

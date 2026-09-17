@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { Command } from 'commander';
 
+import { runBackup } from './backup.js';
 import { runDoctor } from './doctor.js';
 import { runDrillCommand } from './drill.js';
 import { runKill, runResume } from './kill.js';
@@ -198,6 +199,33 @@ program
       return;
     }
     console.log('Kill switch cleared. Withdrawal actions will resume per policy.');
+  });
+
+program
+  .command('backup')
+  .description(
+    'Take an online SQLite backup (safe to run while sentinel watch is running) and prune old backups (docs/SPEC.md §9)',
+  )
+  .option('-d, --db <path>', 'path to SQLite database file', 'sentinel.sqlite')
+  .option('-o, --out-dir <path>', 'directory to write backups into', 'backups')
+  .option('--retain <count>', 'how many most-recent backups to keep', '14')
+  .action(async (opts: { db: string; outDir: string; retain: string }) => {
+    const retentionCount = Number.parseInt(opts.retain, 10);
+    if (!Number.isFinite(retentionCount) || retentionCount < 1) {
+      console.error(`--retain must be a positive integer, got "${opts.retain}"`);
+      process.exitCode = 1;
+      return;
+    }
+    const result = await runBackup({
+      dbPath: opts.db,
+      outDir: opts.outDir,
+      retentionCount,
+      logger,
+    });
+    console.log(`Backup written to ${result.backupPath}`);
+    if (result.deletedPaths.length > 0) {
+      console.log(`Pruned ${result.deletedPaths.length} old backup(s): ${result.deletedPaths.join(', ')}`);
+    }
   });
 
 notYetImplemented('positions', 'Phase 2');
