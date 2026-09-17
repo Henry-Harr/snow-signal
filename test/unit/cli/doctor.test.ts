@@ -81,7 +81,7 @@ reports:
     expect(report.overallOk).toBe(false);
   }, 10_000);
 
-  it('warns when no telegram notifier is configured', async () => {
+  it('skips the notifier check when no config file exists', async () => {
     const dir = tempDir();
     dirs.push(dir);
     const report = await runDoctor({
@@ -91,5 +91,73 @@ reports:
     });
     const notifierCheck = report.checks.find((c) => c.name === 'notifier');
     expect(notifierCheck?.status).toBe('skipped');
+  });
+
+  function configWithNotify(notify: string): string {
+    return `
+safe:
+  address: '0x1111111111111111111111111111111111111111'
+chains: {}
+positions: []
+detectors: {}
+policy:
+  danger: { action: partial_withdraw, fraction: 0.5 }
+  critical: { action: full_exit }
+  maxShareOfAvailableLiquidity: 0.05
+execution:
+  mode: off
+  maxPriorityFeeGwei: {}
+notify: ${notify}
+reports:
+  dailyUtcHour: 0
+  benchmark: { kind: pool_base_rate }
+`;
+  }
+
+  it('warns when neither Telegram nor Discord is configured', async () => {
+    const dir = tempDir();
+    dirs.push(dir);
+    const configPath = join(dir, 'sentinel.yaml');
+    writeFileSync(configPath, configWithNotify('{}'));
+
+    const report = await runDoctor({ configPath, dbPath: join(dir, 'sentinel.sqlite'), logger });
+    const notifierCheck = report.checks.find((c) => c.name === 'notifier');
+    expect(notifierCheck?.status).toBe('warn');
+    expect(notifierCheck?.detail).toContain('No Telegram or Discord notifier configured');
+  });
+
+  it('reports ok for a Discord-only setup, without mentioning Telegram as missing', async () => {
+    const dir = tempDir();
+    dirs.push(dir);
+    const configPath = join(dir, 'sentinel.yaml');
+    writeFileSync(
+      configPath,
+      configWithNotify('{ discordWebhookEnv: SENTINEL_DOCTOR_TEST_DISCORD_URL }'),
+    );
+    process.env['SENTINEL_DOCTOR_TEST_DISCORD_URL'] = 'https://discord.com/api/webhooks/x/y';
+
+    try {
+      const report = await runDoctor({ configPath, dbPath: join(dir, 'sentinel.sqlite'), logger });
+      const notifierCheck = report.checks.find((c) => c.name === 'notifier');
+      expect(notifierCheck?.status).toBe('ok');
+      expect(notifierCheck?.detail).toBe('Discord webhook configured');
+    } finally {
+      delete process.env['SENTINEL_DOCTOR_TEST_DISCORD_URL'];
+    }
+  });
+
+  it('warns (not ok) when Discord is configured but the env var is unset', async () => {
+    const dir = tempDir();
+    dirs.push(dir);
+    const configPath = join(dir, 'sentinel.yaml');
+    writeFileSync(
+      configPath,
+      configWithNotify('{ discordWebhookEnv: SENTINEL_DOCTOR_TEST_UNSET_DISCORD_URL }'),
+    );
+
+    const report = await runDoctor({ configPath, dbPath: join(dir, 'sentinel.sqlite'), logger });
+    const notifierCheck = report.checks.find((c) => c.name === 'notifier');
+    expect(notifierCheck?.status).toBe('warn');
+    expect(notifierCheck?.detail).toContain('SENTINEL_DOCTOR_TEST_UNSET_DISCORD_URL is not set');
   });
 });

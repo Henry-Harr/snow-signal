@@ -59,7 +59,10 @@ execution:
   maxPriorityFeeGwei: { ethereum: 50, base: 1 } # placeholders
 
 notify:
+  # Both are optional and independent — configure either, both, or neither (console
+  # always fires regardless). See DISCORD_WEBHOOK_URL/TELEGRAM_BOT_TOKEN in .env.example.
   telegram: { tokenEnv: TELEGRAM_BOT_TOKEN, allowedChatIds: [] }
+  discordWebhookEnv: DISCORD_WEBHOOK_URL
 
 reports:
   dailyUtcHour: 0

@@ -58,7 +58,7 @@ execution:
   maxPriorityFeeGwei: { ethereum: 50, base: 1 } # placeholders
 
 notify:
-  telegram: { tokenEnv: TELEGRAM_BOT_TOKEN, allowedChatIds: [] } # no bot yet — see docs/PROGRESS.md
+  discordWebhookEnv: DISCORD_WEBHOOK_URL # set the real webhook URL in .env, never here
 
 reports:
   dailyUtcHour: 0

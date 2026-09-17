@@ -112,33 +112,55 @@ function checkDatabase(options: DoctorOptions): DoctorCheck {
   }
 }
 
+/** Checks every notifier channel actually configured — Telegram and Discord are
+ * independent (`notifySchema`), so a Discord-only setup must not be reported as
+ * "not configured" just because Telegram isn't set. Overall status is `ok` if at
+ * least one channel is fully working, `warn` if something's configured but
+ * incomplete (or nothing beyond console is configured at all). */
 function checkNotifier(config: SentinelConfig | undefined): DoctorCheck {
   if (!config) {
     return { name: 'notifier', status: 'skipped', detail: 'No config loaded' };
   }
-  if (!config.notify.telegram) {
-    return { name: 'notifier', status: 'warn', detail: 'No Telegram notifier configured' };
-  }
-  const tokenSet = Boolean(process.env[config.notify.telegram.tokenEnv]);
-  if (!tokenSet) {
-    return {
-      name: 'notifier',
-      status: 'warn',
-      detail: `Telegram configured but ${config.notify.telegram.tokenEnv} is not set`,
-    };
-  }
-  if (config.notify.telegram.allowedChatIds.length === 0) {
-    return {
-      name: 'notifier',
-      status: 'warn',
-      detail:
+
+  const details: string[] = [];
+  let anyFullyConfigured = false;
+
+  if (config.notify.telegram) {
+    const tokenSet = Boolean(process.env[config.notify.telegram.tokenEnv]);
+    if (!tokenSet) {
+      details.push(`Telegram configured but ${config.notify.telegram.tokenEnv} is not set`);
+    } else if (config.notify.telegram.allowedChatIds.length === 0) {
+      details.push(
         'Telegram token is set but allowedChatIds is empty — no commands will be accepted from anyone',
+      );
+    } else {
+      details.push('Telegram token present, chat allowlist configured');
+      anyFullyConfigured = true;
+    }
+  }
+
+  if (config.notify.discordWebhookEnv) {
+    const webhookSet = Boolean(process.env[config.notify.discordWebhookEnv]);
+    if (!webhookSet) {
+      details.push(`Discord configured but ${config.notify.discordWebhookEnv} is not set`);
+    } else {
+      details.push('Discord webhook configured');
+      anyFullyConfigured = true;
+    }
+  }
+
+  if (details.length === 0) {
+    return {
+      name: 'notifier',
+      status: 'warn',
+      detail: 'No Telegram or Discord notifier configured — alerts will only appear in console/logs',
     };
   }
+
   return {
     name: 'notifier',
-    status: 'ok',
-    detail: 'Telegram token present, chat allowlist configured',
+    status: anyFullyConfigured ? 'ok' : 'warn',
+    detail: details.join('; '),
   };
 }
 
