@@ -1,6 +1,7 @@
-import { createPublicClient, createTestClient, createWalletClient, erc20Abi, http, publicActions } from 'viem';
+import { createPublicClient, createTestClient, createWalletClient, encodeFunctionData, erc20Abi, http, publicActions } from 'viem';
 
 import type { Address, TxRequest } from '../core/types.js';
+import { rolesAbi } from './safe-roles/abi.js';
 
 /**
  * The fork simulator (docs/SPEC.md §8.4, safety rule 5: "simulate every transaction
@@ -28,6 +29,18 @@ export interface SimulateWithdrawalOptions {
    * `balanceOf` read before and after, not assumed from the tx's own calldata. */
   assetAddress: Address;
   expectedAmount: bigint;
+  /** Phase 8 live-executor mode: when present, `tx` is not sent directly — it's
+   * wrapped in `Roles.execTransactionWithRole(...)` and sent by the impersonated
+   * *bot* address instead of the Safe, the same path a real live send takes
+   * (`src/actions/live-executor.ts`). The underlying protocol call still executes
+   * with the Safe as `msg.sender` (Roles calls `Safe.execTransactionFromModule`
+   * internally), so the balance check below is unchanged — still the Safe's own
+   * balance, not the bot's. */
+  viaRoles?: {
+    rolesModAddress: Address;
+    roleKey: `0x${string}`;
+    botAddress: Address;
+  };
 }
 
 export interface SimulationOutcome {
@@ -53,7 +66,29 @@ export async function simulateWithdrawal(
     args: [options.safeAddress],
   });
 
-  await testClient.impersonateAccount({ address: options.safeAddress });
+  // Without `viaRoles`: impersonate the Safe and send `tx` directly (paper mode,
+  // and the drill). With `viaRoles`: impersonate the *bot* and send `tx` wrapped in
+  // `execTransactionWithRole`, to the Roles module — the actual path a real live
+  // send takes.
+  const sender = options.viaRoles?.botAddress ?? options.safeAddress;
+  const callTarget = options.viaRoles?.rolesModAddress ?? options.tx.to;
+  const callData = options.viaRoles
+    ? encodeFunctionData({
+        abi: rolesAbi,
+        functionName: 'execTransactionWithRole',
+        args: [
+          options.tx.to,
+          options.tx.value ?? 0n,
+          options.tx.data,
+          0, // Enum.Operation.Call
+          options.viaRoles.roleKey,
+          true, // shouldRevert — surface the underlying call's own revert, don't swallow it
+        ],
+      })
+    : options.tx.data;
+  const callValue = options.viaRoles ? 0n : (options.tx.value ?? 0n);
+
+  await testClient.impersonateAccount({ address: sender });
   try {
     let gas: bigint;
     try {
@@ -64,10 +99,10 @@ export async function simulateWithdrawal(
       // unbuffered estimate risks an avoidable out-of-gas revert here that a real
       // wallet (which always pads its own estimate) would never hit.
       const estimated = await publicClient.estimateGas({
-        account: options.safeAddress,
-        to: options.tx.to,
-        data: options.tx.data,
-        value: options.tx.value ?? 0n,
+        account: sender,
+        to: callTarget,
+        data: callData,
+        value: callValue,
       });
       gas = (estimated * 6n) / 5n;
     } catch (error) {
@@ -84,10 +119,10 @@ export async function simulateWithdrawal(
     try {
       txHash = await walletClient.sendTransaction({
         chain: null,
-        account: options.safeAddress,
-        to: options.tx.to,
-        data: options.tx.data,
-        value: options.tx.value ?? 0n,
+        account: sender,
+        to: callTarget,
+        data: callData,
+        value: callValue,
         gas,
       });
     } catch (error) {
@@ -116,10 +151,10 @@ export async function simulateWithdrawal(
       let reason = 'unknown (replay did not revert)';
       try {
         await publicClient.call({
-          account: options.safeAddress,
-          to: options.tx.to,
-          data: options.tx.data,
-          value: options.tx.value ?? 0n,
+          account: sender,
+          to: callTarget,
+          data: callData,
+          value: callValue,
           gas,
           blockNumber: receipt.blockNumber - 1n,
         });
@@ -154,6 +189,6 @@ export async function simulateWithdrawal(
       failureReason: undefined,
     };
   } finally {
-    await testClient.stopImpersonatingAccount({ address: options.safeAddress });
+    await testClient.stopImpersonatingAccount({ address: sender });
   }
 }

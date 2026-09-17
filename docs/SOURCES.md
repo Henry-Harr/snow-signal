@@ -218,22 +218,41 @@ safe-global/safe-deployments/main/src/assets/v1.4.1/{safe_proxy_factory,safe_l2}
 - **Phase 8 session (2026-09-17), concrete deployment addresses and ABI** — fetched
   directly from the Roles repo's own build artifact,
   `raw.githubusercontent.com/gnosisguild/zodiac-modifier-roles/main/packages/evm/mastercopies.json`
-  (the exact file the repo's own deploy tooling reads), and cross-checked on-chain:
-  - Roles Modifier mastercopy, contract version **2.1.0**: `0x9646fDAD06d3e24444381f44362a3B0eB343D337`.
-  - Deployed via the shared Zodiac `ModuleProxyFactory` (the `"factory"` field in the
-    same JSON entry): `0xce0042b868300000d44a59004da54a005ffdcf9f`.
-  - Verified **on-chain**, not just from the JSON: `cast codesize` against both
-    addresses on Ethereum mainnet (`ETH_RPC_PRIMARY`) and Base (`BASE_RPC_PRIMARY`)
-    returns real, identical bytecode sizes on both chains (mastercopy 24,401 bytes,
-    factory 308 bytes) — real deployed contracts, not a stale/aspirational listing.
+  (the exact file the repo's own deploy tooling reads), and cross-checked on-chain.
+  **First attempt was wrong, caught by a real fork test, corrected via a second,
+  independent source**: the JSON entry's own `"factory"` field
+  (`0xce0042b868300000d44a59004da54a005ffdcf9f`) turned out to be the ERC-2470
+  *singleton* factory — used once by the Zodiac team to deploy the mastercopy itself
+  deterministically, not the per-instance factory a caller uses to deploy their own
+  module clone; a real `deployModule` call against it reverted immediately (`cast
+  call --trace` showed the revert happening before even reaching `createProxy`'s
+  logic — confirmed via `raw.githubusercontent.com/gnosisguild/zodiac-core/master/
+contracts/factory/ModuleProxyFactory.sol`, the actual factory contract's source, that
+  this address's tiny 308-byte bytecode couldn't be it). The real per-instance
+  `ModuleProxyFactory` and the actually-correct Roles mastercopy version came from a
+  second, independent source: the separate `@gnosis-guild/zodiac` npm package
+  (v5.0.1)'s own `dist/esm/contracts.js` address registry — which also explicitly
+  flags the **2.1.0** mastercopy as **known faulty**
+  (`FAULTY[KnownContracts.ROLES]["2.1.0"]` in that same file, enforced by that
+  package's own `sanityCheckZodiacModuleAddress` throwing on it). Corrected addresses,
+  used throughout `src/actions/safe-roles/`, both confirmed deployed (`cast codesize`,
+  real non-zero bytecode) on Ethereum mainnet and Base, and the deployment flow
+  confirmed working end to end via `cast call --trace` (a real `setUp` call, complete
+  with `OwnershipTransferred`/`RolesModSetup`/`Initialized`/`ModuleProxyCreation`
+  events) before writing any application code against it:
+  - Roles Modifier mastercopy, contract version **2.1.1**: `0xF2964CE6161ce0e75964Fe7927cE114cb0B283D5`.
+  - `ModuleProxyFactory` v1.2.0: `0x000000000000aDdB49795b0f9bA5BC298cDda236`.
   - Full Roles ABI (73 entries, including `setUp`, `assignRoles`, `scopeTarget`,
     `scopeFunction`, `allowFunction`, `revokeTarget`, `revokeFunction`,
-    `execTransactionWithRole`) came from the same `mastercopies.json` entry's own
-    `abi` field. `ModuleProxyFactory`'s ABI (`deployModule(masterCopy, initializer,
-    saltNonce)` / `ModuleProxyCreation` event) came from the separate
-    `@gnosis-guild/zodiac` npm package (v5.0.1)'s bundled
-    `dist/esm/abis/factory/1.2.0.js`. Both copied verbatim into `src/actions/safe-roles/abi.ts`,
-    not retyped from memory.
+    `execTransactionWithRole`) came from the `mastercopies.json` entry's own `abi`
+    field (2.1.0 and 2.1.1 have an identical ABI — diffed directly, only the
+    generated export name differs — so the 2.1.0 entry's ABI is still valid for the
+    2.1.1 mastercopy actually used). `ModuleProxyFactory`'s ABI
+    (`deployModule(masterCopy, initializer, saltNonce)` / `ModuleProxyCreation`
+    event) came from the same `@gnosis-guild/zodiac` package's bundled
+    `dist/esm/abis/factory/1.2.0.js` (matching the "1.2.0" factory version actually
+    deployed). Both copied verbatim into `src/actions/safe-roles/abi.ts`, not
+    retyped from memory.
   - The `ConditionFlat`/`ParameterType`/`Operator`/`ExecutionOptions` enum and struct
     definitions Sentinel's setup script uses to hand-build permission-scoping
     condition trees (rather than depending on `zodiac-roles-sdk`, which pushes its
