@@ -16,8 +16,9 @@ for why). Phase 8 (guarded live execution, forks only): complete, with one
 deliberate, documented exception (`docs/adr/0012-live-executor-not-wired-into-
 pipeline.md` — the live executor exists, is fully tested with a real signed
 transaction against a fork, and is never wired to run automatically; see that ADR for
-why).** The `sentinel watch` / `report` / `label` / `replay` / `drill` / `kill` /
-`resume` CLI commands are all wired and tested against real chain data.
+why). Phase 9 (hardening): complete.** The `sentinel watch` / `report` / `label` /
+`replay` / `drill` / `kill` / `resume` / `backup` CLI commands are all wired and
+tested against real chain data.
 `docs/REPLAY_RESULTS.md` and `docs/TUNING_LOG.md` are real artifacts from an actual
 run against live archive RPCs, not placeholders — see the dedicated Phase 6 session
 note further down for the full detail, including two real pre-existing bugs the
@@ -1074,6 +1075,77 @@ deployment, `docs/RUNBOOK.md`, a final `docs/THREAT_MODEL.md` review — plus th
 live-executor pipeline wiring this session deliberately deferred (ADR 0012) and the
 `config.detectors`/gas-scoring gaps Phase 6 already flagged.
 
+**Phase 9 session:** five parts, each committed and pushed separately.
+
+1. **Chaos tests** (`test/integration/cli/watch-chaos.test.ts`,
+   `test/integration/chain/reorg.test.ts`,
+   `test/integration/core/pipeline-chaos.test.ts`) — deliberately scoped to prove
+   things the existing mock-based unit/property tests didn't already cover: a
+   genuinely unreachable chain, a real reorg produced on a live Anvil fork (`evm_
+   snapshot`/`revert` + remine, confirmed by comparing block hashes at the same
+   height — `anvil_reorg` isn't supported in the available Foundry version), and
+   two real forks pinned to different blocks standing in for a disagreeing
+   provider. Caught one real bug along the way: viem's default `eth_blockNumber`
+   response caching (~4s) made a poll immediately after manually mining look like
+   nothing had changed — fixed by constructing a fresh viem client per poll in
+   that one test rather than reusing a long-lived one.
+2. **Prometheus metrics + health endpoint** (`src/ops/metrics.ts`,
+   `src/ops/health-server.ts`, wired into `src/cli/watch.ts`, guarded by the new
+   `config.ops` schema). `core/pipeline.ts`'s `runOnce` now returns each
+   position's recorded decision (positionId + level) instead of `void`, purely so
+   `watch.ts` can record metrics without a redundant storage re-query — every
+   existing caller that ignored the old `void` return still compiles unchanged.
+   New `RpcPool.getHealthSnapshot()` feeds the provider-health gauges.
+3. **Docker + docker-compose + systemd + SQLite backups** (`docker/`). No Docker
+   daemon is available in this sandbox to actually run `docker build`, so the
+   three-stage Dockerfile (deps → build → `pnpm prune --prod` → runtime) was
+   instead verified by manually replicating each stage's exact `COPY`s in an
+   isolated scratch directory and running the resulting pruned build for real —
+   which caught a genuine bug the same way the chaos tests caught the viem one:
+   `package.json`'s `prepare` script (`scripts/install-git-hooks.sh`) ran
+   unconditionally during `pnpm install`, including with no `.git` directory at
+   all (exactly the Docker-build situation), and failed outright; fixed by making
+   that script no-op cleanly outside a git checkout. `sentinel backup`
+   (`src/cli/backup.ts`) uses better-sqlite3's native online-backup API against a
+   **read-only** connection to the live database, so it never contends with
+   `sentinel watch`'s WAL writer. Log rotation is delegated to Docker's json-file
+   driver / journald rather than an in-app library, matching the existing
+   stdout-JSON pino convention. **Caveat, logged honestly**: while validating
+   `docker-compose.yml` (`docker compose config`, which interpolates and prints
+   `env_file` values), the real Alchemy RPC API keys from this session's local
+   `.env` were echoed into a tool result and are now visible in this session's own
+   transcript — not committed anywhere, not a private key or seed phrase, but
+   worth the user's awareness in case that transcript is retained or reviewed
+   later; rotating those specific keys is a reasonable precaution if that's a
+   concern.
+4. **`docs/RUNBOOK.md`** — setup, configuration reference, daily operation,
+   reading alerts, incident response, the kill switch, revoking the bot's Safe
+   access. Written to be honest about the current state: explicitly says live
+   execution isn't wired into the automatic pipeline yet regardless of
+   `execution.mode` (ADR 0012), and that `config.detectors` isn't wired up yet
+   either, rather than describing the aspirational end state.
+5. **Final `docs/THREAT_MODEL.md` review + dependency audit** — every mitigation
+   checked against what Phase 8/9 actually built (not just planned); fixed a
+   stale copy-paste duplication in §1; added the real fork-test evidence behind
+   the Roles-scoping/quorum/reorg claims. `pnpm audit --prod` is clean; `pnpm
+   audit` (incl. dev) found 7 advisories, all in vitest's own transitive chain,
+   all requiring a dev-only server this project never runs, and stripped from the
+   production image entirely by `pnpm prune --prod`. Attempted the actual fix
+   (`vitest` ≥4.1.11) and hit an unmet `vite` peer plus a hard
+   `ERR_PACKAGE_PATH_NOT_EXPORTED` at runtime — reverted rather than push an
+   unverified major-version migration through an unrelated task, logged as a
+   scoped follow-up in "Known issues" instead.
+
+Final tally: `pnpm lint`/`typecheck`/`test` (507 tests, 76 files)/`build` all
+green; `pnpm test:integration` (22 files, 70+ tests, real Anvil forks) all green.
+
+**Phase 9 is now complete.** Remaining, not part of Phase 9's own scope but named
+in "Known issues" above: the live-executor pipeline wiring (deliberately deferred
+in Phase 8, ADR 0012), the `config.detectors`/gas-scoring wiring gaps Phase 6
+flagged, and the vitest/vite dependency upgrade this session attempted and
+reverted. Phase 10 (risk-adjusted allocation) is optional and explicitly gated on
+the user confirming the watchdog has run reliably first — not started.
+
 ### What's done
 
 - Old repo content (`index.html`, `resort.html`, `CNAME`, `.gitattributes` — a ski
@@ -1708,18 +1780,52 @@ switch, the e2e/negative tests, the mainnet guide) is done and verified; "wire i
 into the automatic pipeline" isn't one of those named deliverables, and — per the
 ADR — deserves its own review pass given what it would actually enable.
 
-### Phase 9 — Hardening
+### Phase 9 — Hardening — **DONE 2026-09-17**
 
-- [ ] Chaos tests: kill providers, inject stale data, force reorgs mid-run.
-- [ ] Prometheus metrics + optional Grafana dashboard JSON; health endpoint.
-- [ ] Docker + docker-compose + systemd unit alternative; graceful shutdown; SQLite
-      backups; log rotation.
-- [ ] `docs/RUNBOOK.md` (setup, config, daily ops, reading alerts, incident response,
-      kill switch, revoking the bot's Safe role).
-- [ ] Final `docs/THREAT_MODEL.md` review.
-- [ ] Dependency audit.
+- [x] Chaos tests: kill providers, inject stale data, force reorgs mid-run.
+      `test/integration/cli/watch-chaos.test.ts` (one chain fully unreachable),
+      `test/integration/chain/reorg.test.ts` (a genuine reorg on a fork, not a
+      mock), `test/integration/core/pipeline-chaos.test.ts` (two real forks that
+      genuinely disagree — proves `QuorumError`/zero-decisions-persisted end to
+      end). All against real Anvil forks, not mocks — deliberately scoped to prove
+      genuinely new things the existing unit/property tests didn't already cover.
+- [x] Prometheus metrics + health endpoint. `src/ops/metrics.ts` +
+      `src/ops/health-server.ts`, wired into `sentinel watch`. No Grafana
+      dashboard JSON — that part of this line was explicitly optional and skipped;
+      the metric names/labels in `src/ops/metrics.ts` are the starting point if one
+      is ever wanted.
+- [x] Docker + docker-compose + systemd unit alternative; graceful shutdown; SQLite
+      backups; log rotation. `docker/` (Dockerfile, docker-compose.yml,
+      systemd/*.service+.timer, README.md); `sentinel backup` (`src/cli/backup.ts`)
+      for the SQLite backups; log rotation delegated to Docker's json-file driver /
+      journald rather than an in-app library (stdout-JSON logs, 12-factor style).
+      Graceful shutdown and automatic resume-after-restart were already correct
+      from earlier phases — verified, not rebuilt.
+- [x] `docs/RUNBOOK.md` (setup, config, daily ops, reading alerts, incident
+      response, kill switch, revoking the bot's Safe role) — all seven sections,
+      written to state the real current gaps (live execution not auto-wired,
+      config.detectors not wired) rather than the aspirational end state.
+- [x] Final `docs/THREAT_MODEL.md` review — every mitigation checked against what
+      actually got built (not just planned), a stale duplicated line fixed, new
+      fork-test evidence cited for the Roles-scoping/quorum/reorg claims, "Open
+      items" rewritten to separate what's actually done from what's still open.
+- [x] Dependency audit. `pnpm audit --prod`: clean. `pnpm audit` (incl. dev):
+      7 advisories, all in vitest's own transitive chain, all requiring a
+      dev-only server this project never runs, and stripped from the production
+      image entirely by `pnpm prune --prod`. Triaged and documented
+      (`docs/THREAT_MODEL.md` §5), not silently ignored — the actual fix needs a
+      coordinated vitest/vite major-version migration, attempted and reverted
+      this session (see "Known issues" above), logged as a scoped follow-up.
 
-**Done when:** chaos tests pass, runbook covers every alert type and the kill switch.
+**Done when:** chaos tests pass (yes — 3 new fork-based chaos tests, all green,
+alongside the full existing suite), runbook covers every alert type (yes, via
+`docs/DETECTORS.md`'s existing per-detector detail plus `docs/RUNBOOK.md` §4's
+alert-format walkthrough) and the kill switch (yes, `docs/RUNBOOK.md` §6).
+
+Verification for the whole phase: `pnpm lint`, `pnpm typecheck`, `pnpm test` (507
+unit/property tests), `pnpm build`, and the full `pnpm test:integration` suite (22
+files / 70+ tests, real Anvil forks) all pass — see the Phase 9 session note further
+up for the point-in-time details of each part.
 
 ### Phase 10 — Risk-adjusted allocation (optional, last)
 
