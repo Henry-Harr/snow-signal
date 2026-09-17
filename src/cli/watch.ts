@@ -1,3 +1,5 @@
+import type { Server } from 'node:http';
+
 import { LiveBlockSource } from '../chain/block-source.js';
 import { createViemContractReadClient, type ContractReadClient } from '../chain/client.js';
 import { RpcPool } from '../chain/rpc-pool.js';
@@ -12,6 +14,13 @@ import { TelegramNotifier } from '../notify/telegram.js';
 import type { Notifier } from '../notify/types.js';
 import { pollTelegramUpdatesOnce, type TelegramPollOptions } from '../notify/telegram-poll.js';
 import type { TelegramCommandDeps } from '../notify/telegram-commands.js';
+import { startHealthServer } from '../ops/health-server.js';
+import {
+  blocksProcessedTotal,
+  pipelineRunDurationSeconds,
+  recordDecision,
+  recordProviderHealth,
+} from '../ops/metrics.js';
 import { DEFAULT_DWELL_SECONDS } from '../risk/types.js';
 import { defaultDetectors } from '../signals/registry.js';
 import { ChainStateRepository } from '../storage/chain-state-repository.js';
@@ -145,6 +154,10 @@ export async function runWatch(options: WatchOptions): Promise<void> {
     return { chain, chainId: chainConfig.chainId, pool, blockSource };
   });
 
+  const healthServer: Server | undefined = config.ops.metricsEnabled
+    ? startHealthServer({ port: config.ops.metricsPort, host: config.ops.metricsHost, logger })
+    : undefined;
+
   let running = true;
   const stop = (): void => {
     running = false;
@@ -175,8 +188,13 @@ export async function runWatch(options: WatchOptions): Promise<void> {
               dwellSeconds: DEFAULT_DWELL_SECONDS,
               configHash,
             };
-            await runOnce(deps, block);
+            const stopTimer = pipelineRunDurationSeconds.startTimer({ chain });
+            const decisions = await runOnce(deps, block);
+            stopTimer();
+            blocksProcessedTotal.inc({ chain });
+            for (const { positionId, level } of decisions) recordDecision(positionId, level);
           }
+          recordProviderHealth(chain, pool.getHealthSnapshot());
         } catch (error) {
           logger.error({ chain, err: error }, 'pipeline iteration failed, will retry next poll');
         }
@@ -197,6 +215,7 @@ export async function runWatch(options: WatchOptions): Promise<void> {
   } finally {
     process.off('SIGINT', stop);
     process.off('SIGTERM', stop);
+    if (healthServer) await new Promise<void>((resolve) => healthServer.close(() => resolve()));
     db.close();
   }
 }

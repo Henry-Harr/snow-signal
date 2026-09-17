@@ -197,6 +197,19 @@ export class RpcPool<TClient extends ChainClient = ChainClient> {
     }
     return min;
   }
+
+  /** Read-only snapshot of each provider's current health, for metrics
+   * (`src/ops/metrics.ts`, Phase 9) — never mutated by the caller. */
+  getHealthSnapshot(): { provider: string; consecutiveFailures: number; lastLatencyMs: number | undefined }[] {
+    return this.providers.map((provider) => {
+      const health = this.health.get(provider.name)!;
+      return {
+        provider: provider.name,
+        consecutiveFailures: health.consecutiveFailures,
+        lastLatencyMs: health.lastLatencyMs,
+      };
+    });
+  }
 }
 
 function quorumEquals(a: unknown, b: unknown): boolean {

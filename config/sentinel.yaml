@@ -63,3 +63,8 @@ notify:
 reports:
   dailyUtcHour: 0
   benchmark: { kind: pool_base_rate }
+
+ops:
+  metricsEnabled: true
+  metricsPort: 9469
+  metricsHost: 127.0.0.1

@@ -205,6 +205,7 @@ export async function runReplayScenario(
     execution: { mode: 'off', maxPriorityFeeGwei: {}, liveChains: [], roles: {} },
     notify: {},
     reports: { dailyUtcHour: 0, benchmark: { kind: 'pool_base_rate' } },
+    ops: { metricsEnabled: false, metricsPort: 9469, metricsHost: '127.0.0.1' },
   };
 
   const dispatcher = new AlertDispatcher({ notifiers: [], clock: new SystemClock() });

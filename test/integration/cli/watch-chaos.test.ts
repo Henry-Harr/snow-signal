@@ -72,6 +72,8 @@ notify: {}
 reports:
   dailyUtcHour: 0
   benchmark: { kind: pool_base_rate }
+ops:
+  metricsEnabled: false
 `,
     );
   }, 60_000);

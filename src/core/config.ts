@@ -144,6 +144,15 @@ const reportsSchema = z.object({
   benchmark: benchmarkSchema,
 });
 
+/** Metrics/health HTTP server (docs/SPEC.md §9 Phase 9, docs/THREAT_MODEL.md §1) —
+ * bound to localhost by default; a non-loopback `metricsHost` is an explicit,
+ * visible choice in the config file, never Sentinel's own default. */
+const opsSchema = z.object({
+  metricsEnabled: z.boolean().default(true),
+  metricsPort: z.number().int().min(1).max(65535).default(9469),
+  metricsHost: z.string().min(1).default('127.0.0.1'),
+});
+
 export const sentinelConfigSchema = z.object({
   safe: z.object({ address: addressSchema }),
   chains: z.record(z.string(), chainSchema),
@@ -153,6 +162,7 @@ export const sentinelConfigSchema = z.object({
   execution: executionSchema,
   notify: notifySchema,
   reports: reportsSchema,
+  ops: opsSchema.default({}),
 });
 
 export type SentinelConfig = z.infer<typeof sentinelConfigSchema>;

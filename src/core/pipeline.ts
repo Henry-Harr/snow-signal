@@ -1,7 +1,7 @@
 import { runPaperExecution, type PaperExecutorPosition } from '../actions/paper-executor.js';
 import { normalizeAaveOraclePrice, buildAssetExposure } from '../risk/context.js';
 import { decide } from '../risk/state-machine.js';
-import { initialPositionRiskState, type PositionRiskState } from '../risk/types.js';
+import { initialPositionRiskState, type PositionRiskState, type RiskLevel } from '../risk/types.js';
 import { evaluateAll } from '../signals/registry.js';
 import type { AssetContext, Detector, DetectorContext, MarketContext } from '../signals/types.js';
 import {
@@ -344,13 +344,24 @@ async function fetchAssetContext(
   };
 }
 
+/** One position's recorded decision from a `runOnce` call — for the caller's own
+ * metrics/observability (`src/ops/metrics.ts`, Phase 9); not persisted itself (that's
+ * `DecisionRecordRepository`'s job, already done by the time this is returned). */
+export interface RunOnceDecisionSummary {
+  positionId: string;
+  level: RiskLevel;
+}
+
 /** Runs the full pipeline once for one chain's newly-confirmed block: collect,
  * store, assemble, detect, decide, dispatch. Positions/markets outside this chain
  * are untouched — the caller runs this once per chain per confirmed block, matching
  * `LiveBlockSource`'s own per-chain design. */
-export async function runOnce(deps: PipelineDeps, at: BlockRef): Promise<void> {
+export async function runOnce(
+  deps: PipelineDeps,
+  at: BlockRef,
+): Promise<RunOnceDecisionSummary[]> {
   const positions = positionsForChain(deps.config, deps.chain);
-  if (positions.length === 0) return;
+  if (positions.length === 0) return [];
 
   const safeAddress = deps.config.safe.address as Address;
 
@@ -422,6 +433,7 @@ export async function runOnce(deps: PipelineDeps, at: BlockRef): Promise<void> {
 
   const signals = evaluateAll(deps.detectors, detectorContext);
 
+  const decisionSummaries: RunOnceDecisionSummary[] = [];
   for (const position of positions) {
     const marketOrVaultId = position.marketId;
     const existingState = deps.repos.riskState.get(position.positionId);
@@ -443,6 +455,7 @@ export async function runOnce(deps: PipelineDeps, at: BlockRef): Promise<void> {
 
     deps.repos.riskState.save(result.state, deps.clock.now());
     const decisionId = deps.repos.decisionRecords.record(result.decision);
+    decisionSummaries.push({ positionId: position.positionId, level: result.decision.level });
 
     if (result.decision.level === 'NORMAL' && !result.decision.standingAlert) continue;
 
@@ -517,4 +530,6 @@ export async function runOnce(deps: PipelineDeps, at: BlockRef): Promise<void> {
       }
     }
   }
+
+  return decisionSummaries;
 }

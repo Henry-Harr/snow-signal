@@ -94,6 +94,7 @@ function minimalConfig(): SentinelConfig {
     execution: { mode: 'paper', maxPriorityFeeGwei: { ethereum: 40 }, liveChains: [], roles: {} },
     notify: {},
     reports: { dailyUtcHour: 0, benchmark: { kind: 'pool_base_rate' } },
+    ops: { metricsEnabled: false, metricsPort: 9469, metricsHost: '127.0.0.1' },
   };
 }
 

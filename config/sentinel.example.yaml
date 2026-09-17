@@ -64,3 +64,11 @@ notify:
 reports:
   dailyUtcHour: 0
   benchmark: { kind: pool_base_rate }
+
+# Prometheus /metrics + /health (docs/SPEC.md #9 Phase 9, docs/THREAT_MODEL.md #1).
+# Bound to localhost by default; only widen metricsHost if you know you want the
+# process reachable from outside this machine.
+ops:
+  metricsEnabled: true
+  metricsPort: 9469
+  metricsHost: 127.0.0.1

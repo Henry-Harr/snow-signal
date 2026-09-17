@@ -59,6 +59,7 @@ function testConfig(chain: string): SentinelConfig {
     execution: { mode: 'off', maxPriorityFeeGwei: {}, liveChains: [], roles: {} },
     notify: {},
     reports: { dailyUtcHour: 0, benchmark: { kind: 'pool_base_rate' } },
+    ops: { metricsEnabled: false, metricsPort: 9469, metricsHost: '127.0.0.1' },
   };
 }
 
@@ -129,7 +130,7 @@ for (const testCase of CHAIN_CASES) {
     });
 
     it('runs end to end against real chain data without throwing, and persists a decision per position', async () => {
-      await expect(runOnce(deps, at)).resolves.toBeUndefined();
+      const summaries = await runOnce(deps, at);
 
       const positionIds =
         testCase.chain === 'ethereum'
@@ -139,6 +140,8 @@ for (const testCase of CHAIN_CASES) {
               'morpho-vault:base:0xeE8F4eC5672F09119b96Ab6fB59C27E1b7e44b61',
             ];
 
+      expect(summaries.map((s) => s.positionId).sort()).toEqual([...positionIds].sort());
+
       for (const positionId of positionIds) {
         const decisions = deps.repos.decisionRecords.findRecentForPosition(positionId, 10);
         expect(decisions).toHaveLength(1);
@@ -146,6 +149,9 @@ for (const testCase of CHAIN_CASES) {
 
         const state = deps.repos.riskState.get(positionId);
         expect(state?.level).toBe(decisions[0]!.level);
+
+        const summary = summaries.find((s) => s.positionId === positionId);
+        expect(summary?.level).toBe(decisions[0]!.level);
       }
 
       // A market snapshot was actually stored for at least one position.
@@ -155,7 +161,7 @@ for (const testCase of CHAIN_CASES) {
     }, 60_000);
 
     it('is safe to run twice in a row against the same block (idempotent event storage)', async () => {
-      await expect(runOnce(deps, at)).resolves.toBeUndefined();
+      await expect(runOnce(deps, at)).resolves.toBeInstanceOf(Array);
     }, 60_000);
   });
 }
