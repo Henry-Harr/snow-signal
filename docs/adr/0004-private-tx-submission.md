@@ -42,6 +42,16 @@ Protect works on L1.
   shouldn't, per spec §1.2, but if that ever changes this decision must be revisited
   first).
 
+**Re-checked at the start of Phase 8 (2026-09-17)**, per the above: still no
+Base-native (first-party, Base/Coinbase-documented) private-tx endpoint —
+`docs.base.org`'s own contracts page has no mention of one. Third-party *paid* MEV-
+protection RPC providers now advertise Base support (e.g. Merkle/"blink", GetBlock),
+but that's a different, lower bar than "Base-native... clearly established" — a paid
+third-party relay is an operational/trust dependency the user would have to
+explicitly opt into, not something to wire in by default without being asked.
+Decision unchanged: direct RPC submission on Base, reasoning above still holds since
+nothing about Sentinel's transactions having no extractable MEV value has changed.
+
 ## Consequences
 
 - Base withdrawals are marginally more exposed to public-mempool visibility than

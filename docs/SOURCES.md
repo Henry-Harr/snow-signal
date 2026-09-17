@@ -192,19 +192,59 @@ morpho-blue/main/...` — recorded in `src/protocols/morpho-blue/abi.ts`.
 
 - `@safe-global/protocol-kit` on npm, latest seen 8.0.6 (2026-09-15 search). Docs
   linked from https://www.npmjs.com/package/@safe-global/protocol-kit .
+- **Phase 8 session (2026-09-17), concrete deployment addresses** — fetched directly
+  from `safe-global/safe-deployments`'s own published JSON (`raw.githubusercontent.com/
+safe-global/safe-deployments/main/src/assets/v1.4.1/{safe_proxy_factory,safe_l2}.json`),
+  not from memory. Both files list the exact same address for chain `1` (Ethereum) and
+  chain `8453` (Base) under their `"canonical"` deployment:
+  - `SafeProxyFactory` v1.4.1: `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67`
+  - `SafeL2` v1.4.1 singleton: `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` (the L2
+    variant is used on both chains here — Base needs it, and using it on Ethereum too
+    for Sentinel's own test/setup Safe is harmless: it only adds extra events, no
+    behavior change relevant to Sentinel).
+  - The same JSON files bundle the full ABI; the functions Phase 8 actually needs
+    (`setup`, `enableModule`, `execTransaction`, `isModuleEnabled`, `getThreshold`,
+    `getOwners`, `nonce`, `getTransactionHash`) were pulled verbatim from that `abi`
+    field, not retyped from memory — see `src/actions/safe-roles/abi.ts`.
 
 ## Zodiac Roles Modifier (v2 contract)
 
 - Docs: https://docs.roles.gnosisguild.org/
 - Conditions reference: https://docs.roles.gnosisguild.org/general/conditions
-- SDK: `zodiac-roles-sdk` on npm. Note the **contract** is "Roles Modifier v2" (the
-  version named in spec §4/§8.4) while the **npm SDK package** has its own,
-  much-higher version number (4.1.3 reported in a 2026-08-25 search result) — these are
-  different version counters. Confirm the SDK version is compatible with the on-chain
-  v2 Modifier (vs. a newer v3 modifier contract, if gnosisguild has shipped one) before
-  pinning a version in Phase 8.
+- SDK: `zodiac-roles-sdk` on npm (4.1.3 as of a 2026-08-25 search). **Not used** — see
+  the Phase 8 note below for why Sentinel hand-builds `ConditionFlat` trees instead.
 - Repo: https://github.com/gnosisguild/zodiac-modifier-roles (legacy v1:
   https://github.com/gnosisguild/zodiac-modifier-roles-v1 — do not use).
+- **Phase 8 session (2026-09-17), concrete deployment addresses and ABI** — fetched
+  directly from the Roles repo's own build artifact,
+  `raw.githubusercontent.com/gnosisguild/zodiac-modifier-roles/main/packages/evm/mastercopies.json`
+  (the exact file the repo's own deploy tooling reads), and cross-checked on-chain:
+  - Roles Modifier mastercopy, contract version **2.1.0**: `0x9646fDAD06d3e24444381f44362a3B0eB343D337`.
+  - Deployed via the shared Zodiac `ModuleProxyFactory` (the `"factory"` field in the
+    same JSON entry): `0xce0042b868300000d44a59004da54a005ffdcf9f`.
+  - Verified **on-chain**, not just from the JSON: `cast codesize` against both
+    addresses on Ethereum mainnet (`ETH_RPC_PRIMARY`) and Base (`BASE_RPC_PRIMARY`)
+    returns real, identical bytecode sizes on both chains (mastercopy 24,401 bytes,
+    factory 308 bytes) — real deployed contracts, not a stale/aspirational listing.
+  - Full Roles ABI (73 entries, including `setUp`, `assignRoles`, `scopeTarget`,
+    `scopeFunction`, `allowFunction`, `revokeTarget`, `revokeFunction`,
+    `execTransactionWithRole`) came from the same `mastercopies.json` entry's own
+    `abi` field. `ModuleProxyFactory`'s ABI (`deployModule(masterCopy, initializer,
+    saltNonce)` / `ModuleProxyCreation` event) came from the separate
+    `@gnosis-guild/zodiac` npm package (v5.0.1)'s bundled
+    `dist/esm/abis/factory/1.2.0.js`. Both copied verbatim into `src/actions/safe-roles/abi.ts`,
+    not retyped from memory.
+  - The `ConditionFlat`/`ParameterType`/`Operator`/`ExecutionOptions` enum and struct
+    definitions Sentinel's setup script uses to hand-build permission-scoping
+    condition trees (rather than depending on `zodiac-roles-sdk`, which pushes its
+    state through a hosted Zodiac API — incompatible with "everything runs against a
+    local fork only," safety rules 2/3) came from the actual Solidity source embedded
+    in that same `mastercopies.json` entry's `compilerInput.sources["contracts/
+Types.sol"]` — the real, compiled-from source, not a paraphrase. See
+    `src/actions/safe-roles/conditions.ts` for the encoding built from these exact
+    values, and `docs/adr/0011-hand-built-roles-conditions.md` for why the SDK wasn't
+    used and how the encoding is verified empirically (a fork round-trip: the
+    intended call succeeds, `transfer`/`approve`/a non-Safe recipient all revert).
 
 ## MEV protection / private transaction submission (§8.3)
 

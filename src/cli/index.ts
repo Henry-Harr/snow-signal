@@ -6,6 +6,7 @@ import { Command } from 'commander';
 
 import { runDoctor } from './doctor.js';
 import { runDrillCommand } from './drill.js';
+import { runKill, runResume } from './kill.js';
 import { runLabel } from './label.js';
 import { runReplay } from './replay.js';
 import { runReport } from './report.js';
@@ -174,9 +175,32 @@ program
     process.exitCode = anyFailed ? 1 : 0;
   });
 
+program
+  .command('kill')
+  .description('Activate the global kill switch — suppresses all withdrawal actions down to alert-only (docs/SPEC.md §8.4)')
+  .option('-d, --db <path>', 'path to SQLite database file', 'sentinel.sqlite')
+  .action((opts: { db: string }) => {
+    runKill({ dbPath: opts.db });
+    console.log('Kill switch activated. Withdrawal actions are suppressed to alert-only.');
+    console.log('Re-enable with: sentinel resume --confirm');
+  });
+
+program
+  .command('resume')
+  .description('Clear the global kill switch — CLI-only, requires --confirm (docs/SPEC.md §8.4)')
+  .option('-d, --db <path>', 'path to SQLite database file', 'sentinel.sqlite')
+  .option('--confirm', 'explicit confirmation required to clear the kill switch', false)
+  .action((opts: { db: string; confirm: boolean }) => {
+    const result = runResume({ dbPath: opts.db, confirm: opts.confirm });
+    if (!result.ok) {
+      console.error(result.reason);
+      process.exitCode = 1;
+      return;
+    }
+    console.log('Kill switch cleared. Withdrawal actions will resume per policy.');
+  });
+
 notYetImplemented('positions', 'Phase 2');
-notYetImplemented('kill', 'Phase 8');
-notYetImplemented('resume', 'Phase 8');
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   logger.error({ err: error }, 'sentinel CLI failed');
