@@ -21,10 +21,16 @@ import type { Signal } from '../core/types.js';
  * of watch/danger/critical thresholds. Severity is `critical` whenever `badDebt`
  * crosses the configured minimum (a dust-filtering floor, not a graduated scale).
  *
- * Default threshold: `minBadDebt` defaults to `1n` (raw asset units) — i.e. any
- * nonzero reported bad debt fires by default; config can raise this to filter out
- * protocol-level rounding dust if that turns out to be noisy in practice (spec §7:
- * "critical when realized bad debt reaches a configured amount").
+ * Default threshold: `minBadDebt` defaults to `2_000_000_000n` — $2,000-equivalent
+ * raw units, assuming a 6-decimal stablecoin (every currently-watched asset is USDC;
+ * revisit if a non-6-decimal or non-$1-pegged asset is ever added — this detector has
+ * no decimals/price input to convert against). Originally `1n` (any nonzero bad debt
+ * at all) through Phase 4; raised per `docs/TUNING_LOG.md`'s 2026-09-16 entry, applied
+ * 2026-09-17 after this exact default caused real false CRITICAL/full-exit alerts in
+ * production on both watched Aave v3 Core USDC reserves' small persistent reserve
+ * deficit (~$1.60 Ethereum, ~$30.88 Base — real, but dust, not a crisis). $2,000 clears
+ * both by a wide margin while still catching genuinely material bad debt; see the
+ * tuning log for the replay evidence behind both the original finding and this value.
  *
  * **Standalone-critical** (spec §8.1): bad debt is one of the two detectors spec
  * explicitly allows to trigger a full exit without corroboration from another
@@ -41,7 +47,7 @@ import type { Signal } from '../core/types.js';
  */
 export const D11_ID = 'D11_bad_debt';
 
-export const D11_DEFAULT_MIN_BAD_DEBT = 1n;
+export const D11_DEFAULT_MIN_BAD_DEBT = 2_000_000_000n;
 
 export function createD11Detector(minBadDebt: bigint = D11_DEFAULT_MIN_BAD_DEBT): Detector {
   return {

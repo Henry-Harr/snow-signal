@@ -1319,6 +1319,27 @@ call` read-only, a raw `eth_sendRawTransaction` curl, a non-Bash tool call, and 
 
 ### Known issues / limitations to revisit
 
+- **Found 2026-09-17, the user's first real production deployment**: Ethereum's
+  Aave v3 Core USDC reserve runs at roughly 92% utilization as a matter of course,
+  which crosses `D01_utilization_level`'s `watch` threshold (0.9) almost
+  continuously — confirmed by replay (quiet-ethereum-2026-08: still 27.91 false
+  alarms/week even after fixing D11's unrelated bad-debt threshold the same day,
+  see `docs/TUNING_LOG.md`'s "Applied 2026-09-17" section for the full before/after).
+  Not fixed yet: unlike D11's "any nonzero bad debt is a crisis" (a fairly clear
+  detector-design flaw), utilization genuinely is a leading risk indicator, so
+  raising this threshold is a real judgment call about what "elevated" means for
+  this specific market's actual steady-state — needs its own proper investigation
+  (e.g. what's Aave Core USDC's typical utilization range historically?) rather than
+  a quick guess. Consequence in the meantime: expect occasional `[WATCH]`-level
+  (alert-only, never a withdrawal recommendation) notifications from the Ethereum
+  position.
+- **Also found the same day**: the `kelpdao-rseth-exploit-2026-04` replay scenario's
+  contagion-relevant detectors (D01–D05, D08, D14) only reach `WATCH` during that
+  real panic, never `DANGER`/`CRITICAL` — previously masked by the D11 confound
+  making the scenario show `CRITICAL` for an unrelated reason. Whether topping out
+  at `WATCH` for a genuine cross-market panic event is correct/expected sensitivity
+  or a real coverage gap in the contagion family hasn't been investigated — logged
+  here rather than guessed at.
 - Aave `collateralExposure` is a coarse approximation, not exact accounting (ADR 0001).
   Revisit once Phase 2 can measure the divergence.
 - The hysteresis dwell time (`DEFAULT_DWELL_SECONDS` in `src/cli/watch.ts`, currently 1
