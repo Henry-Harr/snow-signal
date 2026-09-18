@@ -306,6 +306,26 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 12,
+    name: 'risk_state_last_notified_signal_key',
+    up: (db) => {
+      db.exec(`
+        -- Dispatch dedup bookkeeping (found 2026-09-18, the user's first real
+        -- production deployment: the notifier was re-sending a near-identical alert
+        -- on every single poll while a position sat at a non-NORMAL level, even when
+        -- nothing about the decision had actually changed since the last one sent).
+        -- Tracks which set of detector ids (sorted, comma-joined) drove the most
+        -- recent *dispatched* alert for a position, so src/core/pipeline.ts can skip
+        -- re-dispatching when the level hasn't changed and the same detector(s) are
+        -- still the only thing firing — while still always dispatching on a real
+        -- level change, a standing alert (D03), or a genuinely new/different
+        -- detector joining the picture even at the same level. NULL means nothing's
+        -- been dispatched yet, or the last dispatch had no qualifying signals.
+        ALTER TABLE risk_state ADD COLUMN last_notified_signal_key TEXT;
+      `);
+    },
+  },
 ];
 
 function ensureMigrationsTable(db: SentinelDatabase): void {

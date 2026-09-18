@@ -56,6 +56,15 @@ export interface PositionRiskState {
    * `undefined` when `rawLevel === level` (nothing pending). */
   pendingDeescalation?: { rawLevel: RiskLevel; since: Date };
   manualControls: ManualControls;
+  /** Dispatch dedup bookkeeping (`src/core/pipeline.ts`) — the sorted, comma-joined
+   * detector ids that drove the most recently *dispatched* alert for this position.
+   * Not part of the risk computation itself (`decide()` never reads or sets this;
+   * it's carried through state-machine.ts's generic object spreads unchanged) —
+   * purely lets the pipeline tell "a genuinely new/different signal joined the
+   * picture" apart from "the exact same thing that already alerted is still true,"
+   * without re-notifying on every single poll. `undefined` when nothing's been
+   * dispatched yet, or the last dispatch had no qualifying signals. */
+  lastNotifiedSignalKey?: string;
 }
 
 export function initialPositionRiskState(positionId: string, now: Date): PositionRiskState {

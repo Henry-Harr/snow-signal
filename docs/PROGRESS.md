@@ -1342,6 +1342,18 @@ call` read-only, a raw `eth_sendRawTransaction` curl, a non-Bash tool call, and 
   before/after and the reused-materiality-bar reasoning) — not previously caught
   because replay's much coarser sampling stride never exercised the near-flat-
   baseline case this live, block-by-block deployment did on day one.
+- **Found and fixed 2026-09-18, same deployment**: the notifier was re-dispatching a
+  near-identical alert on every single poll while a position sat at a non-`NORMAL`
+  level, even when nothing about the decision had actually changed since the last
+  one sent (ADR 0008's de-escalation dwell timer can keep a stale `WATCH` alive for
+  up to an hour after its raw signals genuinely cleared, and every one of those polls
+  was independently dispatching). Fixed with `computeDispatchDedup`
+  (`src/core/pipeline.ts`) — see `docs/adr/0013-dispatch-dedup.md` for the exact rule
+  and why a strict "only notify on level change" alternative was rejected (it would
+  have silently swallowed the real D12 governance-change alert the user separately
+  confirmed was worth reading, since it arrived while the position happened to
+  already be at `WATCH` for an unrelated reason). New `risk_state.last_notified_
+  signal_key` column (migration 12) persists what was last actually dispatched.
 - **Also found the same day**: the `kelpdao-rseth-exploit-2026-04` replay scenario's
   contagion-relevant detectors (D01–D05, D08, D14) only reach `WATCH` during that
   real panic, never `DANGER`/`CRITICAL` — previously masked by the D11 confound

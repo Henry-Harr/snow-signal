@@ -10,6 +10,7 @@ interface RiskStateRow {
   acked_decision_id: number | null;
   muted_until: string | null;
   forced_level: string | null;
+  last_notified_signal_key: string | null;
 }
 
 function rowToState(row: RiskStateRow): PositionRiskState {
@@ -30,6 +31,9 @@ function rowToState(row: RiskStateRow): PositionRiskState {
       ...(row.muted_until !== null ? { mutedUntil: new Date(row.muted_until) } : {}),
       ...(row.forced_level !== null ? { forcedLevel: row.forced_level as RiskLevel } : {}),
     },
+    ...(row.last_notified_signal_key !== null
+      ? { lastNotifiedSignalKey: row.last_notified_signal_key }
+      : {}),
   };
 }
 
@@ -52,8 +56,8 @@ export class RiskStateRepository {
       .prepare(
         `INSERT INTO risk_state
            (position_id, level, since, pending_deescalation_level, pending_deescalation_since,
-            acked_decision_id, muted_until, forced_level, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            acked_decision_id, muted_until, forced_level, last_notified_signal_key, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (position_id) DO UPDATE SET
            level = excluded.level,
            since = excluded.since,
@@ -62,6 +66,7 @@ export class RiskStateRepository {
            acked_decision_id = excluded.acked_decision_id,
            muted_until = excluded.muted_until,
            forced_level = excluded.forced_level,
+           last_notified_signal_key = excluded.last_notified_signal_key,
            updated_at = excluded.updated_at`,
       )
       .run(
@@ -73,6 +78,7 @@ export class RiskStateRepository {
         state.manualControls.ackedDecisionId ? Number(state.manualControls.ackedDecisionId) : null,
         state.manualControls.mutedUntil?.toISOString() ?? null,
         state.manualControls.forcedLevel ?? null,
+        state.lastNotifiedSignalKey ?? null,
         now.toISOString(),
       );
   }

@@ -37,6 +37,7 @@ describe('RiskStateRepository', () => {
         mutedUntil: new Date('2026-01-02T00:00:00Z'),
         forcedLevel: 'DANGER',
       },
+      lastNotifiedSignalKey: 'D01_utilization_level,D04_abnormal_outflows',
     };
     repo.save(state, NOW);
     expect(repo.get('p1')).toEqual(state);

@@ -21,12 +21,18 @@ const POLICY = {
  * per docs/SPEC.md §9.1, is to work directly off a real archive-capable RPC through
  * the disk cache, so this is the one place in the test suite that's supposed to hit
  * a real network directly). Reuses the same pinned Ethereum block
- * (`test/integration/core/pipeline.test.ts`'s block 25,987,000) that's already known
- * to hold real bad debt in Aave's Core USDC reserve — so this test both proves the
- * replay engine's wiring (cache, synthetic position, `runOnce` integration) *and*
- * cross-checks that it reaches the same real-world finding as the live-pipeline fork
- * test, from an entirely different code path (archive RPC + disk cache instead of an
- * Anvil fork).
+ * (`test/integration/core/pipeline.test.ts`'s block 25,987,000) — so this test both
+ * proves the replay engine's wiring (cache, synthetic position, `runOnce`
+ * integration) *and* cross-checks that it reaches the same result as the
+ * live-pipeline fork test, from an entirely different code path (archive RPC + disk
+ * cache instead of an Anvil fork).
+ *
+ * That block holds real, small, persistent Aave Core USDC reserve deficit (~$1.60 —
+ * `docs/TUNING_LOG.md`'s 2026-09-16/18 entries), which is real bad debt but below
+ * `D11_bad_debt`'s materiality threshold since that threshold was corrected
+ * (`docs/adr` — the same entries) — expect `NORMAL` here, not `CRITICAL`. This test
+ * used to assert `CRITICAL` before that fix landed; that was itself the exact false
+ * positive the fix corrects, not a real finding worth preserving.
  */
 const ETH_URL = process.env['ETH_RPC_ARCHIVE'];
 const logger = createLogger({ level: 'silent' });
@@ -69,8 +75,7 @@ describeIfNetworked('runReplayScenario (live archive RPC + disk cache)', () => {
 
     expect(result.blocksProcessed).toBe(1);
     expect(result.decisions).toHaveLength(1);
-    expect(result.decisions[0]!.level).toBe('CRITICAL');
-    expect(result.decisions[0]!.rule).toContain('D11_bad_debt');
+    expect(result.decisions[0]!.level).toBe('NORMAL');
 
     expect(result.withdrawable).toHaveLength(1);
     expect(result.withdrawable[0]!.blockNumber).toBe(25_987_000n);
@@ -98,7 +103,7 @@ describeIfNetworked('runReplayScenario (live archive RPC + disk cache)', () => {
     });
     const elapsedMs = Date.now() - start;
 
-    expect(second.decisions[0]!.level).toBe('CRITICAL');
+    expect(second.decisions[0]!.level).toBe('NORMAL');
     // Generous bound — the point is "no real network round trips," not a tight SLA.
     expect(elapsedMs).toBeLessThan(5000);
   }, 60_000);
@@ -115,7 +120,15 @@ describeIfNetworked('runReplayScenario (live archive RPC + disk cache)', () => {
  * not a synthetic fixture.
  */
 describeIfNetworked('golden-output regression (real scenario files)', () => {
-  it('kelpdao-rseth-exploit-2026-04 reaches CRITICAL via D11_bad_debt at its point of no return', async () => {
+  it('kelpdao-rseth-exploit-2026-04 does not falsely reach CRITICAL via pre-existing dust bad debt at its point of no return', async () => {
+    // This test used to assert CRITICAL via D11_bad_debt here — that was itself the
+    // exact confound docs/TUNING_LOG.md's D11 entry documents: the exploit's own
+    // collateral was WETH, not USDC, and the "CRITICAL" this single block produced
+    // came entirely from pre-existing, unrelated USDC reserve dust (~$1.60) crossing
+    // D11's old effectively-zero threshold, not from anything this incident actually
+    // did to the watched USDC reserve. After D11's threshold fix, this block
+    // honestly reports NORMAL — losing that CRITICAL isn't losing real detection,
+    // since it was never real detection of this incident to begin with.
     const scenario = loadScenario('scenarios/kelpdao-rseth-exploit-2026-04.yaml');
     const pointOfNoReturn = scenario.groundTruth.find((e) => e.pointOfNoReturn)!;
     const singleBlockScenario: ReplayScenario = {
@@ -132,8 +145,7 @@ describeIfNetworked('golden-output regression (real scenario files)', () => {
     });
 
     expect(result.decisions).toHaveLength(1);
-    expect(result.decisions[0]!.level).toBe('CRITICAL');
-    expect(result.decisions[0]!.rule).toContain('D11_bad_debt');
+    expect(result.decisions[0]!.level).toBe('NORMAL');
   }, 60_000);
 
   it('usdc-depeg-2023-03 fails with the documented historical-address error (docs/PROGRESS.md Known Issues)', async () => {

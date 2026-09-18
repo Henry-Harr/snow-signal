@@ -1,7 +1,12 @@
 import { runPaperExecution, type PaperExecutorPosition } from '../actions/paper-executor.js';
 import { normalizeAaveOraclePrice, buildAssetExposure } from '../risk/context.js';
 import { decide } from '../risk/state-machine.js';
-import { initialPositionRiskState, type PositionRiskState, type RiskLevel } from '../risk/types.js';
+import {
+  initialPositionRiskState,
+  type Decision,
+  type PositionRiskState,
+  type RiskLevel,
+} from '../risk/types.js';
 import { evaluateAll } from '../signals/registry.js';
 import type { AssetContext, Detector, DetectorContext, MarketContext } from '../signals/types.js';
 import {
@@ -352,6 +357,43 @@ export interface RunOnceDecisionSummary {
   level: RiskLevel;
 }
 
+export interface DispatchDedupResult {
+  /** Whether this decision is worth actually sending a notification for. */
+  worthNotifying: boolean;
+  /** The sorted, comma-joined set of detector ids behind this decision —
+   * `undefined` when there are no qualifying signals at all (e.g. a dwell-pending
+   * de-escalation with nothing currently firing). Callers should persist this back
+   * onto `PositionRiskState.lastNotifiedSignalKey` only when `worthNotifying` is
+   * true, so a quiet lull between two occurrences of the *same* detector doesn't
+   * erase the memory of what was last actually reported. */
+  signalKey: string | undefined;
+}
+
+/** Found 2026-09-18, the user's first real production deployment: the notifier was
+ * re-sending a near-identical alert on every single poll while a position sat at a
+ * non-NORMAL level, even when nothing about the decision had changed since the last
+ * one actually sent — e.g. the hysteresis dwell timer (`docs/adr/0008`) keeping a
+ * stale WATCH alive with "no qualifying signals" that particular poll. Worth
+ * notifying about when the level itself changed (any direction), a standing alert is
+ * active (D03's existing "keep reminding" mechanic, left untouched), or a genuinely
+ * different set of detectors is now driving the decision even though the level
+ * hasn't moved (e.g. a governance-family signal joining a position already sitting
+ * at WATCH from a pool-flow one) — never suppressed just because the exact same
+ * detector(s) are still the only thing firing. Exported and pure so this dedup rule
+ * can be unit tested directly, independent of the rest of `runOnce`'s scaffolding. */
+export function computeDispatchDedup(
+  decision: Decision,
+  priorLastNotifiedSignalKey: string | undefined,
+): DispatchDedupResult {
+  const signalKey =
+    decision.signals.length > 0
+      ? [...new Set(decision.signals.map((s) => s.detectorId))].sort().join(',')
+      : undefined;
+  const levelChanged = decision.previousLevel !== decision.level;
+  const hasNewSignal = signalKey !== undefined && signalKey !== priorLastNotifiedSignalKey;
+  return { worthNotifying: levelChanged || hasNewSignal || decision.standingAlert, signalKey };
+}
+
 /** Runs the full pipeline once for one chain's newly-confirmed block: collect,
  * store, assemble, detect, decide, dispatch. Positions/markets outside this chain
  * are untouched — the caller runs this once per chain per confirmed block, matching
@@ -453,11 +495,20 @@ export async function runOnce(
       dwellSeconds: deps.dwellSeconds,
     });
 
+    const { worthNotifying, signalKey } = computeDispatchDedup(
+      result.decision,
+      state.lastNotifiedSignalKey,
+    );
+    if (worthNotifying && signalKey !== undefined) {
+      result.state.lastNotifiedSignalKey = signalKey;
+    }
+
     deps.repos.riskState.save(result.state, deps.clock.now());
     const decisionId = deps.repos.decisionRecords.record(result.decision);
     decisionSummaries.push({ positionId: position.positionId, level: result.decision.level });
 
     if (result.decision.level === 'NORMAL' && !result.decision.standingAlert) continue;
+    if (!worthNotifying) continue;
 
     const marketContext = marketContexts.find((mc) => mc.marketId === marketOrVaultId);
     const positionAsset = marketContext?.position?.asset;
