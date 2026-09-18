@@ -17,21 +17,32 @@ import type { Signal } from '../core/types.js';
  * high reading is real risk regardless of how it got there; D02 (velocity) is the
  * detector that cares about the rate of change.
  *
- * Default thresholds (spec placeholders, tunable in config): watch ≥ 90%, danger ≥
- * 95%, critical ≥ 99%.
+ * Default thresholds: watch ≥ 95%, danger ≥ 97%, critical ≥ 99%. Originally 90%/95%/
+ * 99% through Phase 4 — this is exactly the false-positive source described below,
+ * caught for real: the currently-watched Aave v3 Ethereum Core USDC reserve runs at
+ * roughly 87–94% utilization as a matter of routine (120 days of real on-chain
+ * history sampled every 2 days, 2026-09-18: min 86.70%, p10 89.15%, median 90.96%,
+ * mean 90.77%, p90 92.61%, max 93.94% — see docs/TUNING_LOG.md's 2026-09-18 entry),
+ * so the original 90% watch threshold sat right at this market's typical midpoint,
+ * not a meaningful elevated-risk signal at all. Raised to sit clearly above the
+ * observed 120-day range so it only fires on a genuine excursion beyond this
+ * market's real normal operation; danger raised proportionally; critical left
+ * unchanged (already comfortably above anything observed in that window, and a real
+ * live reading above 99% did occur once separately — see the tuning log).
  *
  * Known false-positive sources: a market that runs near-100% utilization *by design*
  * (some isolated Morpho Blue markets are deliberately capped tight) would fire
  * constantly here with no real elevated risk — D03 (exit coverage, which weighs my
  * actual position against available liquidity) is the more decision-relevant signal
  * for that case; D01 alone should not drive an exit (see corroboration rule, spec
- * §8.1).
+ * §8.1). The above is exactly this failure mode, just discovered for a specific
+ * market via real production data rather than anticipated in the abstract.
  */
 export const D01_ID = 'D01_utilization_level';
 
 export const D01_DEFAULT_THRESHOLDS: AscendingThresholds = {
-  watch: 0.9,
-  danger: 0.95,
+  watch: 0.95,
+  danger: 0.97,
   critical: 0.99,
 };
 

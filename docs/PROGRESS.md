@@ -1319,20 +1319,29 @@ call` read-only, a raw `eth_sendRawTransaction` curl, a non-Bash tool call, and 
 
 ### Known issues / limitations to revisit
 
-- **Found 2026-09-17, the user's first real production deployment**: Ethereum's
-  Aave v3 Core USDC reserve runs at roughly 92% utilization as a matter of course,
-  which crosses `D01_utilization_level`'s `watch` threshold (0.9) almost
-  continuously — confirmed by replay (quiet-ethereum-2026-08: still 27.91 false
-  alarms/week even after fixing D11's unrelated bad-debt threshold the same day,
-  see `docs/TUNING_LOG.md`'s "Applied 2026-09-17" section for the full before/after).
-  Not fixed yet: unlike D11's "any nonzero bad debt is a crisis" (a fairly clear
-  detector-design flaw), utilization genuinely is a leading risk indicator, so
-  raising this threshold is a real judgment call about what "elevated" means for
-  this specific market's actual steady-state — needs its own proper investigation
-  (e.g. what's Aave Core USDC's typical utilization range historically?) rather than
-  a quick guess. Consequence in the meantime: expect occasional `[WATCH]`-level
-  (alert-only, never a withdrawal recommendation) notifications from the Ethereum
-  position.
+- **Found 2026-09-17, fixed 2026-09-18** (the user's first real production
+  deployment): Ethereum's Aave v3 Core USDC reserve runs at roughly 87–94%
+  utilization as a matter of course (120 days of real on-chain history, sampled
+  2026-09-18 — see `docs/TUNING_LOG.md`'s 2026-09-18 D01 entry for the full
+  distribution and before/after replay), which crossed `D01_utilization_level`'s old
+  `watch` threshold (0.90) almost continuously — confirmed by replay
+  (quiet-ethereum-2026-08: still 27.91 false alarms/week even after fixing D11's
+  unrelated bad-debt threshold the same day). `D01_DEFAULT_THRESHOLDS` raised
+  (watch 0.90→0.95, danger 0.95→0.97, critical unchanged) based on that real
+  distribution rather than a guess; false-alarm rate dropped to 3.51/week (an 87%
+  reduction on top of the D11 fix). Some residual `[WATCH]`-level (alert-only)
+  Ethereum notifications remain expected and are not a bug — see that tuning-log
+  entry's caveat on what a leading indicator occasionally crossing its own threshold
+  actually means.
+- **Found and fixed 2026-09-18, same deployment**: `D04_abnormal_outflows`'s
+  modified-z-score math divides by the baseline's median absolute deviation (MAD),
+  which a near-flat baseline (routine for a large, quiet reserve sampled at block
+  granularity) pushes toward zero — turning ordinary flow noise into an absurd score
+  (observed live: >25 million against a `critical` threshold of 16). Fixed with a
+  `minMad` floor (`docs/TUNING_LOG.md`'s 2026-09-18 D04 entry has the full
+  before/after and the reused-materiality-bar reasoning) — not previously caught
+  because replay's much coarser sampling stride never exercised the near-flat-
+  baseline case this live, block-by-block deployment did on day one.
 - **Also found the same day**: the `kelpdao-rseth-exploit-2026-04` replay scenario's
   contagion-relevant detectors (D01–D05, D08, D14) only reach `WATCH` during that
   real panic, never `DANGER`/`CRITICAL` — previously masked by the D11 confound

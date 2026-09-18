@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createD04Detector,
+  D04_DEFAULT_THRESHOLDS,
+  D04_DEFAULT_WINDOWS_SECONDS,
   D04_ID,
   windowedFlows,
 } from '../../../src/signals/D04_abnormal_outflows.js';
@@ -30,7 +32,11 @@ describe('windowedFlows', () => {
 });
 
 describe('D04 abnormal net outflows', () => {
-  const detector = createD04Detector();
+  // minMad: 0 — these tests exercise the generic z-score math with small, readable
+  // synthetic magnitudes, so they opt out of the production minMad floor (which
+  // would otherwise swamp a MAD of 10 entirely) rather than coupling to that
+  // specific tuned constant. The floor itself is tested separately below.
+  const detector = createD04Detector(D04_DEFAULT_THRESHOLDS, D04_DEFAULT_WINDOWS_SECONDS, 0);
 
   /** 5 points spaced exactly 5 minutes apart, ending 5 minutes before `current` — a
    * baseline history with wiggle of ±10 around zero net flow (median 0, MAD 10 for
@@ -99,6 +105,49 @@ describe('D04 abnormal net outflows', () => {
     const history = baselineHistory();
     const last = history[history.length - 1]!;
     expect(detector.evaluate(ctxWithCurrentSupply(last.totalSupplied + 1_000_000n))).toEqual([]);
+  });
+
+  it("the production minMad floor stops a near-flat baseline from blowing ordinary noise into an absurd score (docs/TUNING_LOG.md 2026-09-18)", () => {
+    // A near-flat baseline (MAD of just 1 raw unit — realistic for a large, quiet
+    // stablecoin reserve sampled block-by-block) paired with a real-scale current
+    // supply (hundreds of millions of raw units, i.e. real USDC magnitude) — without
+    // the floor, even a tiny, immaterial swing here produces an enormous z-score.
+    const flows = [-1, 1, -1, 1];
+    let supplied = 500_000_000_000_000n; // ~$500M, realistic Aave Core USDC scale
+    const points = [
+      marketSnapshot({ block: block({ timestamp: NOW - 5 * FIVE_MIN }), totalSupplied: supplied }),
+    ];
+    for (const f of flows) {
+      supplied += BigInt(f);
+      points.push(
+        marketSnapshot({
+          block: block({ timestamp: points[points.length - 1]!.block.timestamp + FIVE_MIN }),
+          totalSupplied: supplied,
+        }),
+      );
+    }
+    const last = points[points.length - 1]!;
+    // A $500 outflow (immaterial at $500M scale) against a MAD of 1 raw unit would,
+    // unfloored, produce a score in the hundreds of millions — with the default
+    // (floored) detector it must stay well within a sane range instead.
+    const ctx = detectorContext({
+      at: block({ timestamp: NOW }),
+      markets: [
+        marketContext({
+          current: marketSnapshot({ block: block({ timestamp: NOW }), totalSupplied: last.totalSupplied - 500_000_000n }),
+          history: points,
+        }),
+      ],
+    });
+    const signals = detector.evaluate(ctx);
+    // With minMad: 0 (this describe block's detector), the unfloored blow-up is
+    // exactly what we're guarding against — assert it really would be absurd here,
+    // then assert the production (floored) detector keeps it sane.
+    expect(signals[0]?.value).toBeGreaterThan(1000);
+
+    const flooredDetector = createD04Detector(); // real production default, incl. minMad
+    const [flooredSignal] = flooredDetector.evaluate(ctx);
+    expect(flooredSignal?.value ?? 0).toBeLessThan(1);
   });
 
   it('does not fire when there is too little history to build a baseline (false-positive guard)', () => {

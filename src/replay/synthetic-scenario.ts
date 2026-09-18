@@ -120,7 +120,7 @@ export interface SyntheticScenario {
 
 const UTILIZATION_SPIKE: SyntheticScenario = {
   id: 'utilization-spike',
-  description: "Injects utilization at 97% (between D01's danger and critical thresholds).",
+  description: "Injects utilization at 97% (at D01's danger threshold, below critical).",
   expectedMinLevel: 'WATCH',
   buildContext: () => ({
     at: AT,

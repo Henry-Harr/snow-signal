@@ -38,12 +38,25 @@ import type { Signal } from '../core/types.js';
  * history (fewer than 3 baseline observations for a window) can't compute a
  * statistically meaningful MAD and is skipped for that window entirely, per the same
  * "fewer than 3, don't reject/flag" convention `rejectOutliers` uses.
+ *
+ * The opposite instability, found in production (docs/TUNING_LOG.md's 2026-09-18
+ * entry): a market whose baseline flow is nearly flat block-to-block (real for a
+ * large, quiet USDC reserve sampled at block granularity) pushes `baselineMad`
+ * toward zero — dividing by a near-zero MAD then turns even completely ordinary
+ * flow noise into an absurd, meaningless z-score (observed: >25 million once).
+ * `minMad` (raw asset units) floors the denominator so immaterial noise below that
+ * floor can't blow up the score; defaults to the same $2,000-equivalent materiality
+ * bar `D11_bad_debt` established for the same currently-watched 6-decimal
+ * stablecoins, for internal consistency rather than an independently-derived number
+ * — revisit with real flow-variance data if that proves too tight or too loose.
  */
 export const D04_ID = 'D04_abnormal_outflows';
 
 export const D04_DEFAULT_THRESHOLDS: AscendingThresholds = { watch: 4, danger: 8, critical: 16 };
 
 export const D04_DEFAULT_WINDOWS_SECONDS = [300, 3600, 21600];
+
+export const D04_DEFAULT_MIN_MAD = 2_000_000_000;
 
 interface FlowPoint {
   block: { timestamp: number };
@@ -71,6 +84,7 @@ export function windowedFlows(points: FlowPoint[], windowSeconds: number): numbe
 export function createD04Detector(
   thresholds: AscendingThresholds = D04_DEFAULT_THRESHOLDS,
   windowsSeconds: number[] = D04_DEFAULT_WINDOWS_SECONDS,
+  minMad: number = D04_DEFAULT_MIN_MAD,
 ): Detector {
   return {
     id: D04_ID,
@@ -78,7 +92,7 @@ export function createD04Detector(
     evaluate(ctx: DetectorContext): Signal[] {
       const signals: Signal[] = [];
       for (const market of ctx.markets) {
-        const perWindow = evaluateMarket(market, windowsSeconds);
+        const perWindow = evaluateMarket(market, windowsSeconds, minMad);
         if (perWindow.length === 0) continue;
 
         const worst = perWindow.reduce((a, b) => (b.score > a.score ? b : a));
@@ -111,7 +125,11 @@ interface WindowResult {
   score: number;
 }
 
-function evaluateMarket(market: MarketContext, windowsSeconds: number[]): WindowResult[] {
+function evaluateMarket(
+  market: MarketContext,
+  windowsSeconds: number[],
+  minMad: number,
+): WindowResult[] {
   const points: FlowPoint[] = [...market.history, market.current];
   const results: WindowResult[] = [];
   for (const windowSeconds of windowsSeconds) {
@@ -123,7 +141,10 @@ function evaluateMarket(market: MarketContext, windowsSeconds: number[]): Window
     if (currentFlow === undefined) continue;
 
     const baselineMedian = median(baselineFlows);
-    const baselineMad = medianAbsoluteDeviation(baselineFlows);
+    // Floored so a near-flat baseline (small but nonzero MAD) can't turn ordinary
+    // flow noise into an absurd score by dividing by a near-zero denominator — see
+    // this detector's own doc comment and docs/TUNING_LOG.md's 2026-09-18 entry.
+    const baselineMad = Math.max(medianAbsoluteDeviation(baselineFlows), minMad);
     // Negated so a large net *outflow* (currentFlow far below the baseline median)
     // produces a large *positive* score — inflows (currentFlow above median) always
     // score negative and never cross a watch/danger/critical threshold.

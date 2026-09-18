@@ -39,13 +39,15 @@ describe('D01 utilization level', () => {
     });
   });
 
-  it('does not fire on a market intentionally run near-100% utilization once just below watch (false-positive guard)', () => {
-    // A market at 89.9% utilization is high but below every threshold — this is the
+  it('does not fire on a market intentionally run near its design ceiling, just below watch (false-positive guard)', () => {
+    // A market at 94.9% utilization is high but below every threshold — this is the
     // known false-positive shape documented in the detector's header comment (a
-    // tightly-capped isolated market running near its design ceiling); D01 must not
-    // fire just because utilization is "high" in an absolute sense.
+    // tightly-capped isolated market running near its design ceiling, or — the real
+    // case that raised these thresholds — a market whose normal operating range just
+    // happens to sit close to the old default); D01 must not fire just because
+    // utilization is "high" in an absolute sense.
     const ctx = detectorContext({
-      markets: [marketContext({ current: marketSnapshot({ utilization: 0.899 }) })],
+      markets: [marketContext({ current: marketSnapshot({ utilization: 0.949 }) })],
     });
     expect(detector.evaluate(ctx)).toEqual([]);
   });
@@ -59,7 +61,7 @@ describe('D01 utilization level', () => {
         }),
         marketContext({
           marketId: 'm2',
-          current: marketSnapshot({ marketId: 'm2', utilization: 0.96 }),
+          current: marketSnapshot({ marketId: 'm2', utilization: 0.98 }),
         }),
       ],
     });

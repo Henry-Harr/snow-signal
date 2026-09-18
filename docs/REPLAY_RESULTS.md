@@ -1,6 +1,6 @@
 # Replay results
 
-_Regenerated 2026-09-17T17:47:30.802Z by `sentinel replay` (docs/SPEC.md §9.3) — regenerate whenever detectors or thresholds change, per that section's own instruction._
+_Regenerated 2026-09-18T17:40:05.110Z by `sentinel replay` (docs/SPEC.md §9.3) — regenerate whenever detectors or thresholds change, per that section's own instruction._
 
 **Reading these numbers**: a lead time or false-alarm count only means what it looks like if the underlying decisions are actually about the scenario's own incident. A pre-existing condition unrelated to the scenario (e.g. small standing bad debt already present before an incident scenario's window even starts) can make a lead time look artificially long, or a "quiet" period look falsely noisy — always check a few of the underlying `DecisionRecord.rule` values (via `sentinel label` or the raw decision records) before trusting a number at face value. See `docs/TUNING_LOG.md` for concrete findings from past runs.
 
@@ -33,16 +33,16 @@ _Regenerated 2026-09-17T17:47:30.802Z by `sentinel replay` (docs/SPEC.md §9.3) 
 ### quiet-ethereum-2026-08
 
 - Duration: 35.9 days
-- False alarms: 143
-- False alarms per week: 27.91
+- False alarms: 18
+- False alarms per week: 3.51
 - Blocks sampled: 144
 
 ## Synthetic fault-injection scenarios
 
-| Scenario           | Expected min. level | Actual level | Result   |
-| ------------------ | -------------------- | ------------- | -------- |
-| utilization-spike  | WATCH                | WATCH         | PASS     |
-| frozen-oracle      | WATCH                | WATCH         | PASS     |
-| depeg              | WATCH                | WATCH         | PASS     |
-| whale-exit         | WATCH                | WATCH         | PASS     |
-| paused-withdrawals | WATCH                | NORMAL        | **FAIL** |
+| Scenario | Expected min. level | Actual level | Result |
+|---|---|---|---|
+| utilization-spike | WATCH | WATCH | PASS |
+| frozen-oracle | WATCH | WATCH | PASS |
+| depeg | WATCH | WATCH | PASS |
+| whale-exit | WATCH | WATCH | PASS |
+| paused-withdrawals | WATCH | NORMAL | **FAIL** |
