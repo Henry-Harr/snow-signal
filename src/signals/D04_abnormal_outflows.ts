@@ -27,9 +27,14 @@ import type { Signal } from '../core/types.js';
  * carries all three so a corroborating human can see whether it's a 5-minute flash or
  * a sustained 6-hour drain.
  *
- * Default thresholds (spec placeholders — only watch/danger given; critical is an
- * extrapolated placeholder): watch at z ≥ 4, danger at z ≥ 8, critical at z ≥ 16.
- * Windows default to 300s/3600s/21600s.
+ * Default thresholds (docs/TUNING_LOG.md's 2026-09-19 entry has the full real-data
+ * derivation): watch at z ≥ 20, danger at z ≥ 50, critical at z ≥ 400. Originally
+ * 4/8/16 through the MAD-floor fix below — raised by roughly an order of magnitude
+ * after a real 7-day, dense (300s-resolution, dual-independent-provider) sample of
+ * Aave v3 Ethereum Core USDC's actual score distribution showed the *old* thresholds
+ * sitting inside ordinary background noise, not past it: the 300s window alone had
+ * p90 ≈ 10.4 (already above the old danger=8) and p99 ≈ 260 (16x past the old
+ * critical=16) on completely unremarkable flow. Windows default to 300s/3600s/21600s.
  *
  * Known false-positive sources: a market with naturally lumpy flow (e.g. one large,
  * regular depositor rebalancing on a schedule) will have a wide baseline MAD and so
@@ -47,12 +52,36 @@ import type { Signal } from '../core/types.js';
  * `minMad` (raw asset units) floors the denominator so immaterial noise below that
  * floor can't blow up the score; defaults to the same $2,000-equivalent materiality
  * bar `D11_bad_debt` established for the same currently-watched 6-decimal
- * stablecoins, for internal consistency rather than an independently-derived number
- * — revisit with real flow-variance data if that proves too tight or too loose.
+ * stablecoins, for internal consistency rather than an independently-derived number.
+ *
+ * A second, distinct false-positive source found live the following day
+ * (docs/TUNING_LOG.md's 2026-09-19 entry): a single real, recurring, large actor
+ * (one address, confirmed via `decodeEventLog` against real `Withdraw` events on 5
+ * separate real days) self-withdraws (`user === to`) roughly $180–196M from this
+ * same Ethereum Core USDC reserve at almost the same time daily, always recovering
+ * by the next day. Its z-score (tens of thousands on the 300s window) dwarfs any
+ * threshold sane enough to stay sensitive to genuinely smaller anomalies — and
+ * critically, *no amount of additional history retention fixes this*: the baseline
+ * MAD is a robust statistic **by design** (so one wild historical spike doesn't
+ * distort what counts as normal, see above), so a real pattern that recurs on only
+ * ~0.3% of samples (roughly once a day, sampled every few minutes) can never
+ * accumulate enough weight to widen the baseline even over `HISTORY_LOOKBACK_BLOCKS`
+ * (~28 days, `src/core/pipeline.ts`) of real history. This is therefore an accepted,
+ * understood residual: this specific actor's daily self-withdrawal is expected to
+ * keep crossing `critical` (it is, honestly, a real ~9%-of-pool single-block outflow
+ * event, not nothing — just not a bank run) until a design change (e.g. attributing
+ * flow to a specific counterparty, which would require threading real per-transfer
+ * event data into this detector and giving up its current I/O-free purity) actually
+ * distinguishes "one large actor's own funds, self-directed, self-resolving" from a
+ * genuine broad-based drain. Logged, not solved, in docs/PROGRESS.md's Known Issues.
  */
 export const D04_ID = 'D04_abnormal_outflows';
 
-export const D04_DEFAULT_THRESHOLDS: AscendingThresholds = { watch: 4, danger: 8, critical: 16 };
+export const D04_DEFAULT_THRESHOLDS: AscendingThresholds = {
+  watch: 20,
+  danger: 50,
+  critical: 400,
+};
 
 export const D04_DEFAULT_WINDOWS_SECONDS = [300, 3600, 21600];
 

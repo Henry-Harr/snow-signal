@@ -1,6 +1,6 @@
 # Replay results
 
-_Regenerated 2026-09-18T17:40:05.110Z by `sentinel replay` (docs/SPEC.md §9.3) — regenerate whenever detectors or thresholds change, per that section's own instruction._
+_Regenerated 2026-09-19T19:25:02.575Z by `sentinel replay` (docs/SPEC.md §9.3) — regenerate whenever detectors or thresholds change, per that section's own instruction._
 
 **Reading these numbers**: a lead time or false-alarm count only means what it looks like if the underlying decisions are actually about the scenario's own incident. A pre-existing condition unrelated to the scenario (e.g. small standing bad debt already present before an incident scenario's window even starts) can make a lead time look artificially long, or a "quiet" period look falsely noisy — always check a few of the underlying `DecisionRecord.rule` values (via `sentinel label` or the raw decision records) before trusting a number at face value. See `docs/TUNING_LOG.md` for concrete findings from past runs.
 
@@ -13,7 +13,7 @@ _Regenerated 2026-09-18T17:40:05.110Z by `sentinel replay` (docs/SPEC.md §9.3) 
 ### kelpdao-rseth-exploit-2026-04
 
 - Point of no return: 2026-04-18T17:35:00.000Z (block 24908282)
-- Lead time to WATCH: 1.4d before
+- Lead time to WATCH: 17.5h before
 - Lead time to DANGER: _never reached_
 - Lead time to CRITICAL: _never reached_
 - Recoverable share at point of no return: 100.0%
@@ -26,15 +26,15 @@ _Regenerated 2026-09-18T17:40:05.110Z by `sentinel replay` (docs/SPEC.md §9.3) 
 ### quiet-base-2026-08
 
 - Duration: 36.0 days
-- False alarms: 72
-- False alarms per week: 14.00
+- False alarms: 68
+- False alarms per week: 13.22
 - Blocks sampled: 145
 
 ### quiet-ethereum-2026-08
 
 - Duration: 35.9 days
-- False alarms: 18
-- False alarms per week: 3.51
+- False alarms: 12
+- False alarms per week: 2.34
 - Blocks sampled: 144
 
 ## Synthetic fault-injection scenarios

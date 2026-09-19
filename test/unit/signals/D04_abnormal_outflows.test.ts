@@ -85,17 +85,18 @@ describe('D04 abnormal net outflows', () => {
   it('emits watch for a moderate outflow relative to the baseline MAD', () => {
     const history = baselineHistory();
     const last = history[history.length - 1]!;
-    // baseline median=0, MAD=10 -> score = 0.6745 * outflow / 10; outflow=70 -> ~4.7.
-    const [signal] = detector.evaluate(ctxWithCurrentSupply(last.totalSupplied - 70n));
+    // baseline median=0, MAD=10 -> score = 0.6745 * outflow / 10; outflow=450 -> ~30.35.
+    const [signal] = detector.evaluate(ctxWithCurrentSupply(last.totalSupplied - 450n));
     expect(signal).toMatchObject({ detectorId: D04_ID, family: 'pool_flow', severity: 'watch' });
-    expect(signal?.value).toBeGreaterThanOrEqual(4);
-    expect(signal?.value).toBeLessThan(8);
+    expect(signal?.value).toBeGreaterThanOrEqual(20);
+    expect(signal?.value).toBeLessThan(50);
   });
 
   it('emits critical for a sharp, large outflow', () => {
     const history = baselineHistory();
     const last = history[history.length - 1]!;
-    const [signal] = detector.evaluate(ctxWithCurrentSupply(last.totalSupplied - 2000n));
+    // baseline median=0, MAD=10 -> score = 0.6745 * outflow / 10; outflow=10000 -> ~674.5.
+    const [signal] = detector.evaluate(ctxWithCurrentSupply(last.totalSupplied - 10000n));
     expect(signal?.severity).toBe('critical');
     const evidence = signal?.evidence as { windows: unknown[] };
     expect(evidence.windows).toHaveLength(1); // only the 5-minute window had enough baseline data

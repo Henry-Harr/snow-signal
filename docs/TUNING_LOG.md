@@ -217,3 +217,113 @@ rarely drove a standalone decision level on its own (single-family corroboration
 cap keeps it at WATCH regardless), so its contribution to the quiet-period
 false-alarm counts is already folded into the combined D01+D04 "after" numbers in
 `docs/REPLAY_RESULTS.md`'s latest regeneration.
+
+## 2026-09-19 — D04 (abnormal outflows) thresholds too low even after the MAD floor
+
+**Status: applied 2026-09-19.**
+
+**Evidence**: the MAD-floor fix above stopped the absurd (>1000-sigma) blow-ups, but
+production kept firing D04 `watch`/`danger`/`critical` repeatedly over the following
+~16.5 hours (2026-09-19 02:02–18:30, real live alerts, dispatch-dedup already
+active so these were genuinely distinct, not repeat spam) with values ranging
+4.18–51.06 against the old `watch: 4, danger: 8, critical: 16`. To get real evidence
+rather than re-eyeballing pasted alerts, built a throwaway analysis script
+(`scratch-d04-flow-history.ts`, not committed) that samples Aave v3 Ethereum Core
+USDC's real `totalAToken` at 300-second resolution (matching D04's finest window
+exactly) over a real, dual-independent-provider (Alchemy + Ankr via `RpcPool`,
+matching production's own quorum-read discipline, safety rule 7), 15-minutes-behind-
+tip (avoids near-tip instability), 7-day window (2026-09-12 through 2026-09-19,
+2017 points), and computes the exact production `windowedFlows`/`median`/
+`medianAbsoluteDeviation`/`modifiedZScore` functions (imported directly from
+`src/signals/D04_abnormal_outflows.ts` et al., not reimplemented) as a rolling
+score, exactly matching what the live detector computes on every real poll:
+
+| Window | p50 | p90 | p99 | max |
+|---|---|---|---|---|
+| 300s | ~0.00 | 10.37 | 260.27 | 65211.33 |
+| 3600s | 0.04 | 2.38 | 246.81 | 1913.06 |
+| 21600s | 0.15 | 1.51 | 49.35 | 94.61 |
+
+The old thresholds (4/8/16) sat *inside* ordinary background noise: the 300s
+window's p90 (10.37) already exceeded the old `danger` (8), and its p99 (260.27)
+was 16x past the old `critical` (16) — on completely unremarkable flow, not any
+kind of incident. This fully explains the live 2026-09-19 alert batch: those
+4.18–51.06 readings are ordinary noise sitting in exactly this p50–p99 band, not a
+bug and not a single anomalous event.
+
+**A second, separate, more interesting finding from the same data**: the `max`
+values above are wildly higher than even p99 — a genuine outlier cluster. Traced
+(via `decodeEventLog` against the project's own verified `poolAbi`, never guessed
+from a topic hash — safety rule 6) to a real, single, *recurring* actor: address
+`0x56957E411Ea83a0B4A0689C1fB0D1e5eA0d20149` self-withdraws (`user === to`, a
+`Withdraw` event) $180–196M from this same reserve at almost the same time daily
+(23:30–23:40 UTC), confirmed independently on 5 separate real days (2026-09-12,
+-13, -14, -15, -17 — likely also -18/-19, not individually re-verified), always
+fully recovered by the next day's reading. Not a bug, not an exploit, not a bank
+run — a real, large, self-resolving daily cycle (most likely an automated
+treasury/strategy unwind), roughly 8–9% of this reserve's ~$2.2B TVL moving in a
+single block, every day.
+
+**Root cause of why this can't self-correct with more data**: production already
+retains `HISTORY_LOOKBACK_BLOCKS` (~200,000 blocks, ~28 days, `src/core/
+pipeline.ts`) of history — comfortably longer than this actor's ~daily cycle. But
+`baselineMad` is computed via `medianAbsoluteDeviation`, a *robust* statistic
+chosen specifically so a single wild historical spike can't distort what counts as
+"normal" (see this detector's own doc comment). That robustness is exactly why the
+baseline can never learn this pattern: at 300s-window sampling resolution, one
+daily occurrence contaminates roughly 0.3% of rolling observations — far below
+where a robust statistic like MAD starts to move. However many days of history
+accumulate, the baseline stays "quiet" right up until the actor withdraws, every
+single time.
+
+**Applied change**: `D04_DEFAULT_THRESHOLDS` in `src/signals/D04_abnormal_
+outflows.ts`: watch 4→20, danger 8→50, critical 16→400 — set from the real
+distribution above (watch/danger comfortably clear the ordinary p90/p99 band;
+critical sits above the 300s/3600s windows' real p99 with margin, while still
+being cleared by 30–160x on the recurring actor's actual event).
+
+**Deliberately not fixed here**: the recurring actor's daily withdrawal will still
+cross `critical` under any threshold sane enough to remain useful for a genuinely
+smaller-scale drain — its score is 3+ orders of magnitude above the ordinary tail.
+This is logged as an accepted, understood residual (docs/PROGRESS.md's Known
+Issues), not solved: a real fix would mean attributing flow to a specific
+counterparty (e.g. `user`/`to` from decoded `Withdraw` events) so this detector
+could distinguish "one actor's own funds, self-directed, self-resolving" from a
+genuine broad-based drain — which would require threading real per-transfer event
+data into `MarketContext` and giving up D04's current I/O-free purity
+(CLAUDE.md's "Detectors are pure" convention). Not attempted in this session; a
+future design decision, not a threshold tweak.
+
+**Verification**: `test/unit/signals/D04_abnormal_outflows.test.ts`'s watch/critical
+boundary tests updated to the new thresholds (synthetic magnitudes recomputed
+against the same MAD=10 baseline already used there, not the real $2,000 floor).
+The full fork integration suite was re-run to confirm no other test depends on the
+old 4/8/16 values.
+
+**Before/after replay** (regenerated same day):
+
+| Scenario | Before this change | After |
+|---|---|---|
+| `quiet-ethereum-2026-08` | 3.51 false alarms/week | **2.34** false alarms/week |
+| `quiet-base-2026-08` | 14.00 false alarms/week | **13.22** false alarms/week |
+| `kelpdao-rseth-exploit-2026-04` | WATCH, lead time 1.4d | WATCH, lead time **17.5h** |
+| Synthetic fault-injection | 4/5 PASS | Unchanged (4/5 PASS, same pre-existing `paused-withdrawals` FAIL) |
+
+Both quiet periods improved, as expected from the evidence. **One honest tradeoff,
+not hidden**: KelpDAO's lead time to `WATCH` shortened from 1.4 days to 17.5 hours
+— raising D04's thresholds means it takes a real outflow longer to cross the new,
+higher bar during a genuine panic, same as any threshold raise trades some
+sensitivity for fewer false alarms. Still comfortably ahead of the incident's point
+of no return, and this scenario's contagion-relevant detectors already had an open
+question logged (`docs/PROGRESS.md`'s Known Issues: whether topping out at `WATCH`
+here is correct/expected or a real coverage gap) — this shortened lead time is
+additional context for that same still-open question, not a new one, and is not
+independently acted on here.
+
+Note also: this replay run's `quiet-*` scenarios use `sampleIntervalBlocks: 1800`
+(~6h) — far coarser than D04's 300s/3600s windows — so this replay number reflects
+mostly the 21600s window's contribution, not the same dense real-cadence evidence
+the threshold values above were actually derived from (`scratch-d04-flow-history.ts`'s
+300s-resolution real sample). The replay number is a useful regression check and a
+directionally-consistent confirmation, not the primary evidence for the threshold
+choice itself.

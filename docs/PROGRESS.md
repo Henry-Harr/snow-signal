@@ -1361,6 +1361,24 @@ call` read-only, a raw `eth_sendRawTransaction` curl, a non-Bash tool call, and 
   at `WATCH` for a genuine cross-market panic event is correct/expected sensitivity
   or a real coverage gap in the contagion family hasn't been investigated — logged
   here rather than guessed at.
+- **Found 2026-09-19, thresholds raised same day, root cause NOT fixed**:
+  `D04_abnormal_outflows`'s old thresholds (4/8/16, even after the MAD-floor fix
+  above) sat inside real ordinary background noise for Aave v3 Ethereum Core USDC —
+  a real 7-day dense sample showed the 300s window's p90 already past the old
+  `danger` and its p99 16x past the old `critical` (full distribution and
+  before/after in `docs/TUNING_LOG.md`'s 2026-09-19 entry). Thresholds raised to
+  20/50/400 from that real distribution. Separately, the same investigation found a
+  real, recurring, single-actor daily self-withdrawal (~$180–196M, same address,
+  confirmed on 5 separate real days via `decodeEventLog`) that will **still cross
+  `critical` under any threshold sane enough to stay useful** — its score is 3+
+  orders of magnitude above ordinary noise, and no amount of `HISTORY_LOOKBACK_
+  BLOCKS` retention can fix this because the baseline MAD is a robust statistic *by
+  design*, so a ~0.3%-of-samples-frequency real pattern can never move it. This is
+  an accepted, understood, **not solved** residual: expect one real `critical`
+  D04 alert roughly daily around 23:30–23:40 UTC from this specific known actor
+  until D04 gains real per-counterparty attribution (would require threading
+  decoded `Withdraw`-event `user`/`to` data into `MarketContext`, giving up D04's
+  current I/O-free purity — a design change, not attempted this session).
 - Aave `collateralExposure` is a coarse approximation, not exact accounting (ADR 0001).
   Revisit once Phase 2 can measure the divergence.
 - The hysteresis dwell time (`DEFAULT_DWELL_SECONDS` in `src/cli/watch.ts`, currently 1
