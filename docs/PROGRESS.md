@@ -1887,6 +1887,52 @@ unit/property tests), `pnpm build`, and the full `pnpm test:integration` suite (
 files / 70+ tests, real Anvil forks) all pass — see the Phase 9 session note further
 up for the point-in-time details of each part.
 
+### Liquidation scanner (`src/liquidations/`, docs/adr/0014) — new, not a numbered phase
+
+User asked what it would take to make Sentinel "earn" rather than just protect
+principal; after discussing leverage/active-trading (rejected — real principal
+risk, wrong fit for a "protect my deposit" project) and liquidation-bot/MEV
+searching, chose the latter and explicitly asked for a detection-only scanner
+first (find and log real opportunities, no execution), in the same repo. Built
+2026-09-19:
+
+- [x] `src/liquidations/close-factor.ts` + `profit.ts` — pure, unit-tested, Aave's
+      real close-factor rule (verified against `LiquidationLogic.sol`, docs/SOURCES.md).
+- [x] `src/liquidations/aave-reserves.ts` — on-chain reads (`getReservesList`,
+      `getReserveConfigurationData`, `getAssetsPrices`, and a new `getUserReserveData`
+      ABI entry, verified against `IPoolDataProvider.sol`) — confirmed working
+      against real Ethereum chain data (67 real reserves, correct symbols/prices)
+      before moving on.
+- [x] `src/liquidations/subgraph.ts` — Aave's official subgraph for candidate
+      borrower discovery (cursor-paginated), never trusted for the actual
+      liquidation decision — schema verified to not even expose a health factor.
+- [x] `src/liquidations/scanner.ts` — orchestrates: subgraph candidates → real
+      `getUserAccountData` health check (reuses `fetchAaveBorrowerHealth`) → real
+      per-reserve breakdown for anyone actually below HF 1.0 → profit estimate.
+- [x] `liquidation_opportunities` table (migration 13) + repository — append-only
+      evidence log, written by nothing that acts on it.
+- [x] `sentinel scan-liquidations` CLI command — one-shot, not wired into
+      `sentinel watch`'s loop or the risk-decision pipeline (deliberate structural
+      isolation from the core watchdog, ADR 0014).
+- [x] Full verification: lint/typecheck/533 unit tests (14 new)/build all pass.
+
+**Not yet done / explicitly open**:
+- The subgraph deployment IDs (`AAVE_SUBGRAPH_ID_ETHEREUM`/`_BASE`) were found via
+  web search, not confirmed against a real live query — no `GRAPH_API_KEY` was
+  available this session. **First real step once the user has a key: run one real
+  scan and sanity-check the output before trusting anything from it.**
+- No real evidence yet on whether genuinely competitive opportunities exist on
+  the currently-scoped markets (Aave v3 Core, Ethereum + Base) — realistic
+  expectation, stated to the user up front, is that professional searchers likely
+  win most liquid-market races; this scanner exists to find that out with real
+  data, not to assume it either way.
+- Profit estimate is gross only (no gas, no DEX slippage) — explicitly an upper
+  bound for evidence-gathering, not a number ready to act on.
+- Morpho Blue liquidations out of scope (different mechanics) — would need its
+  own research pass, same as Aave did here, before extending.
+- No execution logic exists or is planned yet — this stays detection-only until
+  real evidence justifies the next step, mirroring watch → paper → live.
+
 ### Phase 10 — Risk-adjusted allocation (optional, last)
 
 - [ ] Only start after the user confirms the watchdog has run reliably. Whitelisted

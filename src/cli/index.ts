@@ -11,6 +11,7 @@ import { runKill, runResume } from './kill.js';
 import { runLabel } from './label.js';
 import { runReplay } from './replay.js';
 import { runReport } from './report.js';
+import { runScanLiquidations } from './scan-liquidations.js';
 import { runWatch } from './watch.js';
 import { createLogger } from '../core/logger.js';
 
@@ -226,6 +227,40 @@ program
     if (result.deletedPaths.length > 0) {
       console.log(`Pruned ${result.deletedPaths.length} old backup(s): ${result.deletedPaths.join(', ')}`);
     }
+  });
+
+program
+  .command('scan-liquidations')
+  .description(
+    'Detection-only Aave v3 liquidation scanner (docs/adr/0014) — logs theoretical opportunities, never sends a transaction',
+  )
+  .option('-c, --config <path>', 'path to config file', 'config/sentinel.yaml')
+  .option('-d, --db <path>', 'path to SQLite database file', 'sentinel.sqlite')
+  .option('--chain <chain>', 'chain to scan (ethereum or base)', 'ethereum')
+  .option('--market <market>', 'Aave v3 market to scan', 'core')
+  .action(async (opts: { config: string; db: string; chain: string; market: string }) => {
+    if (opts.chain !== 'ethereum' && opts.chain !== 'base') {
+      console.error(`--chain must be "ethereum" or "base", got "${opts.chain}"`);
+      process.exitCode = 1;
+      return;
+    }
+    const opportunities = await runScanLiquidations({
+      configPath: opts.config,
+      dbPath: opts.db,
+      chain: opts.chain,
+      market: opts.market,
+      logger,
+    });
+    if (opportunities.length === 0) {
+      console.log('No liquidatable positions found.');
+      return;
+    }
+    for (const o of opportunities) {
+      console.log(
+        `${o.user}: repay ${o.debtSymbol} / seize ${o.collateralSymbol}, gross profit ~$${(Number(o.grossProfitBase) / 1e8).toFixed(2)} (health factor ${(Number(o.healthFactor) / 1e18).toFixed(4)})`,
+      );
+    }
+    console.log(`\n${opportunities.length} opportunity(ies) logged to ${opts.db}.`);
   });
 
 notYetImplemented('positions', 'Phase 2');

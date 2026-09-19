@@ -326,6 +326,41 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 13,
+    name: 'liquidation_opportunities',
+    up: (db) => {
+      db.exec(`
+        -- The liquidation scanner's detection-only log (docs/adr/0014-liquidation-
+        -- scanner.md) — one row per real, on-chain-confirmed (health factor < 1.0
+        -- via getUserAccountData, never trusted from the subgraph alone) opportunity
+        -- found on a scan. Never written to by anything that sends a transaction —
+        -- this table exists purely to build real evidence on frequency/profitability
+        -- before any execution logic is ever considered, the same paper-before-live
+        -- discipline the rest of this project follows.
+        CREATE TABLE liquidation_opportunities (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          chain TEXT NOT NULL,
+          market TEXT NOT NULL,
+          user_address TEXT NOT NULL,
+          at TEXT NOT NULL,
+          block_number TEXT NOT NULL,
+          health_factor TEXT NOT NULL,
+          debt_asset TEXT NOT NULL,
+          debt_symbol TEXT NOT NULL,
+          debt_to_cover_base TEXT NOT NULL,
+          collateral_asset TEXT NOT NULL,
+          collateral_symbol TEXT NOT NULL,
+          collateral_seized_base TEXT NOT NULL,
+          liquidation_bonus REAL NOT NULL,
+          gross_profit_base TEXT NOT NULL
+        );
+
+        CREATE INDEX idx_liquidation_opportunities_at
+          ON liquidation_opportunities (at DESC);
+      `);
+    },
+  },
 ];
 
 function ensureMigrationsTable(db: SentinelDatabase): void {

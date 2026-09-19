@@ -471,6 +471,48 @@ addresses.ts`) returns `0x` at these blocks. Confirmed via direct `eth_getCode`
     per spec's own instruction to test "how the watched stablecoin reserves behaved
     during the rush to withdraw," not to reconstruct the WETH-specific mechanics.
 
+## Liquidation scanner (docs/adr/0014, `src/liquidations/`)
+
+- **`getUserReserveData` ABI** (`src/protocols/aave-v3/abi.ts`): verified against
+  `IPoolDataProvider.sol` in the official `aave-dao/aave-v3-origin` repo
+  (raw.githubusercontent.com, `main` branch, fetched 2026-09-19) — full return tuple
+  reproduced verbatim (`currentATokenBalance`, `currentStableDebt`,
+  `currentVariableDebt`, `principalStableDebt`, `scaledVariableDebt`,
+  `stableBorrowRate`, `liquidityRate`, `stableRateLastUpdated`,
+  `usageAsCollateralEnabled`), same sourcing discipline as every other ABI entry
+  in that file.
+- **Close-factor rule** (`src/liquidations/close-factor.ts`): verified against
+  `LiquidationLogic.sol` in the same repo, same fetch date. Constants:
+  `CLOSE_FACTOR_HF_THRESHOLD = 0.95e18`, `MIN_BASE_MAX_CLOSE_FACTOR_THRESHOLD =
+  2000e8`, `DEFAULT_LIQUIDATION_CLOSE_FACTOR = 50%` (0.5e4 raw). Rule: 100%
+  liquidatable at or below the HF threshold; otherwise 50%, but only once both
+  total collateral and total debt clear the $2,000 base-currency bar (below that,
+  100% regardless — a dust-position guard). Fetched via a web-fetch AI summary of
+  the raw source with the actual constant/conditional code included verbatim in the
+  response, not purely paraphrased — reasonable confidence, but this is a
+  simplification for a detection-only estimate (the contract's `MIN_LEFTOVER_BASE`
+  edge case isn't modeled) and should be re-verified against the literal source
+  (or fork-simulated) before any real execution is ever built on it.
+- **Aave v3 official subgraph schema**: `aave/protocol-subgraphs` repo,
+  `schemas/v3.schema.graphql` (raw.githubusercontent.com, `main` branch, fetched
+  2026-09-19). Confirmed: no computed health factor field anywhere in the schema —
+  `User`/`UserReserve` only expose raw balances and `borrowedReservesCount`, hence
+  this module's subgraph-for-discovery/on-chain-for-truth split (ADR 0014).
+- **Subgraph deployment IDs** — found via web search of the README/Explorer listing,
+  **not independently re-confirmed against a live query this session** (no
+  `GRAPH_API_KEY` was available to test with): Ethereum V3
+  `Cd2gEDVeqnjBn1hSeqFMitw8Q1iiyV9FYUZkLNRcL87g`, Base V3
+  `GQFbb95cE6d8mV989mL5figjaGaKCQB3xqYrr1bRyXqF`. Re-confirm against
+  `thegraph.com/explorer` once a real key exists, before trusting any scan output —
+  these go in `.env` as `AAVE_SUBGRAPH_ID_ETHEREUM`/`AAVE_SUBGRAPH_ID_BASE`, not
+  hardcoded in source, specifically because they weren't independently verified.
+- **The Graph pricing**: free tier is 100,000 queries/month (paid beyond that,
+  ~$2-4/100k) — the old free "hosted service" is fully deprecated, all queries now
+  go through the decentralized network's gateway with an API key. Source: web
+  search summary, 2026-09-19, not an official Graph docs page directly fetched —
+  reasonable confidence for a cost estimate, re-check thegraph.com/studio-pricing
+  directly if this ever needs to be precise (e.g. before scaling scan frequency).
+
 ## Runtime / tooling versions
 
 - Node.js: Active LTS is **Node 24** as of 2026-09-15 (Node 22 is in Maintenance LTS,

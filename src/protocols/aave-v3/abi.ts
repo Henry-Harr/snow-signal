@@ -188,6 +188,31 @@ export const poolDataProviderAbi = [
     ],
   },
   {
+    // IPoolDataProvider.sol, verified against the official aave-dao/aave-v3-origin
+    // repo (raw.githubusercontent.com, `main` branch, fetched 2026-09-19 —
+    // docs/SOURCES.md). Per-reserve breakdown `getUserAccountData` doesn't give
+    // (docs/SPEC.md's own note on D15's limitation) — used by the liquidation
+    // scanner (`src/liquidations/`) to find which specific reserve to repay/seize.
+    type: 'function',
+    name: 'getUserReserveData',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'asset', type: 'address' },
+      { name: 'user', type: 'address' },
+    ],
+    outputs: [
+      { name: 'currentATokenBalance', type: 'uint256' },
+      { name: 'currentStableDebt', type: 'uint256' },
+      { name: 'currentVariableDebt', type: 'uint256' },
+      { name: 'principalStableDebt', type: 'uint256' },
+      { name: 'scaledVariableDebt', type: 'uint256' },
+      { name: 'stableBorrowRate', type: 'uint256' },
+      { name: 'liquidityRate', type: 'uint256' },
+      { name: 'stableRateLastUpdated', type: 'uint40' },
+      { name: 'usageAsCollateralEnabled', type: 'bool' },
+    ],
+  },
+  {
     type: 'function',
     name: 'getReserveDeficit',
     stateMutability: 'view',
