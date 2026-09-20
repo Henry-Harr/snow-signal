@@ -183,6 +183,10 @@ describe('governance target factories', () => {
     expect(target.events).toHaveLength(
       poolConfiguratorAbi.filter((x) => x.type === 'event').length,
     );
+    // asset must be the real, registered USDC address — decodeEvents now drops any
+    // log about a reserve outside the adapter's watchedAssets (found live,
+    // 2026-09-20: unfiltered cross-reserve governance events falsely attributed
+    // to the watched USDC position, see src/protocols/aave-v3/adapter.ts).
     const decoded = target.decode([
       {
         address: CONFIGURATOR,
@@ -190,10 +194,11 @@ describe('governance target factories', () => {
         transactionHash: '0xabc',
         logIndex: 0,
         eventName: 'ReserveFrozen',
-        args: {},
+        args: { asset: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', frozen: true },
       },
     ]);
     expect(decoded[0]!.protocol).toBe('aave-v3');
+    expect(decoded[0]!.marketId).toBe('aave-v3:ethereum:core:USDC');
   });
 
   it('morphoBlueGovernanceTarget watches only the governance subset, not pool-flow events', () => {

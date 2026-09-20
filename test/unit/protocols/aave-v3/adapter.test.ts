@@ -435,7 +435,16 @@ describe('AaveV3Adapter', () => {
   });
 
   describe('decodeEvents', () => {
-    it('normalizes a decoded log into a ProtocolEvent', () => {
+    // A second, real reserve on the same shared Pool/PoolConfigurator contract but
+    // NOT in this adapter's watchedAssets (['USDC'] only) — the whole point of
+    // these tests (found live, 2026-09-20: a large governance cleanup touching
+    // dozens of unrelated reserves produced a false DANGER escalation for the
+    // watched USDC position, because every reserve's events were previously
+    // stamped with the same un-asset-scoped marketId regardless of which reserve
+    // they were actually about).
+    const WETH = addr('7e');
+
+    it('normalizes a decoded log about the watched reserve into a ProtocolEvent, asset-scoped marketId', () => {
       const events = makeAdapter().decodeEvents([
         {
           address: POOL,
@@ -450,7 +459,7 @@ describe('AaveV3Adapter', () => {
         {
           protocol: 'aave-v3',
           chainId: 1,
-          marketId: 'aave-v3:ethereum:core',
+          marketId: 'aave-v3:ethereum:core:USDC', // matches position.marketId's format elsewhere
           eventName: 'Supply',
           blockNumber: 21_500_000n,
           transactionHash: '0xabc',
@@ -458,6 +467,62 @@ describe('AaveV3Adapter', () => {
           args: { reserve: USDC, onBehalfOf: OWNER, amount: 1_000n },
         },
       ]);
+    });
+
+    it('drops a pool-flow log about a reserve outside watchedAssets', () => {
+      const events = makeAdapter().decodeEvents([
+        {
+          address: POOL,
+          blockNumber: 21_500_000n,
+          transactionHash: '0xabc',
+          logIndex: 3,
+          eventName: 'Supply',
+          args: { reserve: WETH, onBehalfOf: OWNER, amount: 1_000n },
+        },
+      ]);
+      expect(events).toEqual([]);
+    });
+
+    it('drops a governance (asset-keyed) log about a reserve outside watchedAssets', () => {
+      const events = makeAdapter().decodeEvents([
+        {
+          address: addr('cc'),
+          blockNumber: 21_500_000n,
+          transactionHash: '0xdef',
+          logIndex: 0,
+          eventName: 'ReserveFrozen',
+          args: { asset: WETH, frozen: true },
+        },
+      ]);
+      expect(events).toEqual([]);
+    });
+
+    it('keeps a governance log about the watched reserve, asset-scoped marketId', () => {
+      const events = makeAdapter().decodeEvents([
+        {
+          address: addr('cc'),
+          blockNumber: 21_500_000n,
+          transactionHash: '0xdef',
+          logIndex: 0,
+          eventName: 'SupplyCapChanged',
+          args: { asset: USDC, oldSupplyCap: 100n, newSupplyCap: 1n },
+        },
+      ]);
+      expect(events).toMatchObject([{ marketId: 'aave-v3:ethereum:core:USDC' }]);
+    });
+
+    it('keeps a LiquidationCall where only the debtAsset (not collateralAsset) is watched', () => {
+      const events = makeAdapter().decodeEvents([
+        {
+          address: POOL,
+          blockNumber: 21_500_000n,
+          transactionHash: '0xghi',
+          logIndex: 0,
+          eventName: 'LiquidationCall',
+          args: { collateralAsset: WETH, debtAsset: USDC, user: OWNER, debtToCover: 1n },
+        },
+      ]);
+      expect(events).toMatchObject([{ marketId: 'aave-v3:ethereum:core:USDC' }]);
     });
   });
 });

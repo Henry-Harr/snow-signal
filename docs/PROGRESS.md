@@ -1379,6 +1379,56 @@ call` read-only, a raw `eth_sendRawTransaction` curl, a non-Bash tool call, and 
   until D04 gains real per-counterparty attribution (would require threading
   decoded `Withdraw`-event `user`/`to` data into `MarketContext`, giving up D04's
   current I/O-free purity — a design change, not attempted this session).
+- **Found and fixed 2026-09-20, live production**: `AaveV3Adapter.decodeEvents`
+  stamped *every* decoded Pool/PoolConfigurator log with the adapter's plain
+  `this.id` (`aave-v3:ethereum:core`, no asset), regardless of which reserve the
+  event was actually about — Aave's Pool/PoolConfigurator contracts are shared
+  across every reserve in the market, not one contract per reserve. Two distinct,
+  serious consequences, both live this whole deployment:
+  1. **False positive (found via a real incident)**: a large, real Aave governance
+     risk-parameter cleanup (freezing/slashing supply caps on dozens of unrelated
+     reserves — GHO, several LSTs, etc. — none of them USDC) got attributed
+     wholesale to the watched USDC position's `D12_risky_governance_change`
+     signals, producing a real, cross-family-corroborated `DANGER` decision and an
+     actual "partial withdrawal (50%)" action recommendation
+     (`execution.mode: off`, so nothing was actually withdrawn — no real harm, but
+     this was a false alarm at the most consequential level this deployment has
+     produced). The alert's 11 near-identical `D12` lines (each about a different,
+     unrelated reserve — real events, just misattributed) were the tell.
+  2. **False negative (much larger, silent, undiscovered until this investigation)**:
+     `src/core/pipeline.ts`'s `findByMarket(position.marketId, 0n)` queries by the
+     asset-scoped `aave-v3:ethereum:core:USDC` format used everywhere else, which
+     never matched the un-asset-scoped `marketId` `decodeEvents` actually stamped
+     — meaning `computeHolderLedger`'s Aave input has been **empty on every single
+     poll**, for both Ethereum and Base, since this deployment started. `D14`
+     (contagion) and `D15` (borrower health share) have never received real signal
+     input for either watched Aave position — not tuned wrong, not noisy, just
+     silently dead the entire time. Expect these to start firing for the first
+     time, potentially with false positives of their own, now that they're
+     actually fed real data — watch closely rather than assume day-one silence
+     means "working correctly."
+
+  Root cause and fix: `decodeEvents` now resolves each log's own reserve address
+  (`reserve`/`asset`/`collateralAsset`+`debtAsset` depending on event shape,
+  verified per-event against each ABI entry) against `watchedAssets`, drops any
+  log about a reserve outside that set, and stamps a match with the correct
+  asset-scoped `marketId`. Verified against real chain data (the actual governance
+  cleanup transactions, `getLogs` against the real PoolConfigurator) before
+  writing the fix, not guessed at. New tests cover: watched-reserve pool-flow and
+  governance logs get the right `marketId`; unwatched-reserve logs of both kinds
+  are dropped; a `LiquidationCall` with only one of `collateralAsset`/`debtAsset`
+  watched is still kept. Full verification suite (lint/typecheck/537 unit
+  tests/build/fork integration) green.
+  **`MorphoBlueAdapter.decodeEvents` has the same un-scoped-`this.id` pattern**
+  (`morpho-blue:${chain}`, no market id) — not fixed this session: no
+  `morpho-blue` position is currently configured, and `src/core/pipeline.ts`
+  doesn't even dispatch that position type yet (see the comment already there:
+  "A direct morpho-blue position would be handled here the same way, once one is
+  actually configured"), so this is a latent, not live, bug. Most Morpho Blue
+  events key on a market `id` that would map cleanly the same way; a few
+  (`SetOwner`, `EnableIrm`, `EnableLltv`, `SetFeeRecipient`) are genuinely
+  protocol-global rather than market-scoped, so the fix isn't a direct copy of
+  Aave's — needs its own pass before a `morpho-blue` position is ever configured.
 - Aave `collateralExposure` is a coarse approximation, not exact accounting (ADR 0001).
   Revisit once Phase 2 can measure the divergence.
 - The hysteresis dwell time (`DEFAULT_DWELL_SECONDS` in `src/cli/watch.ts`, currently 1

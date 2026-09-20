@@ -435,16 +435,78 @@ export class AaveV3Adapter implements ProtocolAdapter {
     };
   }
 
+  /** Which reserve a decoded log actually concerns, if any — Aave's `Pool` and
+   * `PoolConfigurator` contracts are shared across *every* reserve in the market
+   * (not one contract per reserve), so a raw log stream mixes events for every
+   * reserve together regardless of which one this adapter was asked to watch.
+   * `Supply`/`Withdraw`/`Borrow`/`Repay` key on `reserve`; every
+   * `poolConfiguratorAbi` event this project reads keys on `asset` (verified
+   * against each event's own ABI entry, `src/protocols/aave-v3/abi.ts`);
+   * `LiquidationCall` has two reserves (`collateralAsset`/`debtAsset`) and counts
+   * as concerning either. Anything else (a future event type not yet handled here)
+   * returns `undefined` and is dropped — see `decodeEvents`'s own doc comment on
+   * why "unrecognized, so drop it" is the safe default here, not "unrecognized, so
+   * keep it." */
+  private reserveAddressesFor(log: Log): Address[] {
+    const reserve = log.args['reserve'];
+    if (typeof reserve === 'string') return [reserve as Address];
+    const asset = log.args['asset'];
+    if (typeof asset === 'string') return [asset as Address];
+    const collateralAsset = log.args['collateralAsset'];
+    const debtAsset = log.args['debtAsset'];
+    if (typeof collateralAsset === 'string' || typeof debtAsset === 'string') {
+      return [collateralAsset, debtAsset].filter((a): a is Address => typeof a === 'string');
+    }
+    return [];
+  }
+
+  /** Every decoded log this adapter has actually seen concerns *some* reserve on
+   * the shared Pool/PoolConfigurator contract, but only the reserves in
+   * `watchedAssets` are this adapter's own position(s) — stamping every log with
+   * this adapter's plain `this.id` (no asset) regardless of which reserve it was
+   * about would silently mix in every other reserve's activity: a large,
+   * unrelated reserve's `ReserveFrozen`/`SupplyCapChanged`/etc. would get
+   * attributed to *this* position's governance risk (found live, 2026-09-20 — a
+   * large multi-reserve Aave governance risk-parameter cleanup, touching dozens
+   * of unrelated reserves, produced a false `DANGER` cross-family corroboration
+   * for the watched USDC position, which never itself changed), and conversely
+   * `Supply`/`Withdraw`/`Borrow`/`Repay` events get stored under a `marketId`
+   * that never matches `position.marketId`'s asset-scoped format elsewhere in
+   * this project — silently starving `computeHolderLedger`
+   * (`src/watchers/large-holders.ts`, feeding D14/D05 and `borrowerHealth`/D15)
+   * of any real events at all, every single poll, with no error. Filtering by the
+   * log's own reserve address here fixes both: an event about a reserve outside
+   * `watchedAssets` is dropped entirely (never a signal, never a stored event, for
+   * *this* position), and an event about a watched reserve gets the correct,
+   * asset-scoped `marketId` so downstream `marketId`-keyed lookups actually
+   * match. */
   decodeEvents(logs: Log[]): ProtocolEvent[] {
-    return logs.map((log) => ({
-      protocol: 'aave-v3',
-      chainId: this.chainId,
-      marketId: this.id,
-      eventName: log.eventName,
-      blockNumber: log.blockNumber,
-      transactionHash: log.transactionHash,
-      logIndex: log.logIndex,
-      args: log.args,
-    }));
+    const events: ProtocolEvent[] = [];
+    for (const log of logs) {
+      const reserveAddresses = this.reserveAddressesFor(log);
+      const symbol = this.watchedAssets.find((s) =>
+        reserveAddresses.some(
+          (addr) => addr.toLowerCase() === resolveAaveV3Asset(this.chain, s).toLowerCase(),
+        ),
+      );
+      if (!symbol) {
+        this.logger?.debug(
+          { eventName: log.eventName, reserveAddresses },
+          'decodeEvents: log is about a reserve outside watchedAssets, dropping',
+        );
+        continue;
+      }
+      events.push({
+        protocol: 'aave-v3',
+        chainId: this.chainId,
+        marketId: this.marketId(symbol),
+        eventName: log.eventName,
+        blockNumber: log.blockNumber,
+        transactionHash: log.transactionHash,
+        logIndex: log.logIndex,
+        args: log.args,
+      });
+    }
+    return events;
   }
 }
