@@ -1966,16 +1966,25 @@ first (find and log real opportunities, no execution), in the same repo. Built
       isolation from the core watchdog, ADR 0014).
 - [x] Full verification: lint/typecheck/533 unit tests (14 new)/build all pass.
 
-**Not yet done / explicitly open**:
-- The subgraph deployment IDs (`AAVE_SUBGRAPH_ID_ETHEREUM`/`_BASE`) were found via
-  web search, not confirmed against a real live query — no `GRAPH_API_KEY` was
-  available this session. **First real step once the user has a key: run one real
-  scan and sanity-check the output before trusting anything from it.**
-- No real evidence yet on whether genuinely competitive opportunities exist on
-  the currently-scoped markets (Aave v3 Core, Ethereum + Base) — realistic
-  expectation, stated to the user up front, is that professional searchers likely
-  win most liquid-market races; this scanner exists to find that out with real
-  data, not to assume it either way.
+**Update 2026-09-22 — real key obtained, first real scan run**:
+- `AAVE_SUBGRAPH_ID_ETHEREUM` confirmed correct against a real live query (49,585
+  real candidate borrowers returned, ~63s for full pagination). Both env vars now
+  set (user's own `.env`, not committed).
+- First real `sentinel scan-liquidations --chain ethereum` run: 408 opportunities
+  found and logged, but **every single one** had gross profit in the $0.00–$0.03
+  range. Directly re-verified 3 of them (including the two most extreme, HF≈0 and
+  HF≈0.0001) against real `getUserAccountData` reads: genuinely real but
+  economically worthless dust positions ($0–$6 total debt, cents of collateral) —
+  not a bug, confirmed via the same "check the raw on-chain number before trusting
+  it" discipline as everything else this project does. Consistent with the
+  realistic expectation given to the user before building this: **zero genuinely
+  competitive opportunities found on Aave v3 Ethereum Core** in this first real
+  scan — professional searchers evidently already clean up anything liquid-market-
+  worthy faster than a periodic scan would ever see. Not yet run against Base.
+- Not yet built: a minimum-profit filter so future scans don't have to log
+  hundreds of known-dust rows to see this same result again — worth adding if
+  this scanner keeps getting run, not done proactively since only asked for a
+  detection-only MVP so far.
 - Profit estimate is gross only (no gas, no DEX slippage) — explicitly an upper
   bound for evidence-gathering, not a number ready to act on.
 - Morpho Blue liquidations out of scope (different mechanics) — would need its
