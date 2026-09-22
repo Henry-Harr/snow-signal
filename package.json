@@ -1,0 +1,39 @@
+{
+  "name": "polymarket-stoploss",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A stop-loss bot for Polymarket positions: watches live prices and automatically sells when a configured loss threshold is crossed.",
+  "bin": {
+    "stoploss": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "stoploss": "tsx src/cli/index.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "commander": "^13.1.0",
+    "pino": "^9.6.0",
+    "viem": "^2.21.54",
+    "ws": "^8.18.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.5.13",
+    "@typescript-eslint/eslint-plugin": "^8.19.1",
+    "@typescript-eslint/parser": "^8.19.1",
+    "eslint": "^9.18.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
+  }
+}

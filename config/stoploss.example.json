@@ -1,0 +1,14 @@
+{
+  "executionMode": "paper",
+  "pollIntervalMs": 2000,
+  "positions": [
+    {
+      "label": "example position — replace with your real one",
+      "tokenId": "PASTE_THE_REAL_CLOB_TOKEN_ID_HERE",
+      "negRisk": false,
+      "shares": "1000000",
+      "stopPrice": 0.5,
+      "sellFraction": 1
+    }
+  ]
+}

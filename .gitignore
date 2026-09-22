@@ -1,34 +1,6 @@
-# Dependencies / build output
 node_modules/
 dist/
-coverage/
-
-# Secrets — never commit real env files or keystores (safety rule 1, docs/SPEC.md #2)
 .env
-.env.*
-!.env.example
-*.keystore
-*.key
-keystores/
-
-# Generated data — never commit (spec #3, #9). Anchored to the repo root (leading
-# slash) so it only matches the generated-report output directory, not any directory
-# literally named "reports" anywhere in the tree — an unanchored pattern here
-# previously (and silently) excluded src/reports/ and test/unit/reports/ from every
-# commit since Phase 5.
-/reports/
-/backups/
 *.sqlite
-*.sqlite-wal
-*.sqlite-shm
-test/replay/.cache/
-.replay-cache/
-
-# Editors / OS
-.DS_Store
-*.swp
-
-# Foundry
-cache/
-out/
-broadcast/*/31337/
+*.sqlite-journal
+*.log
